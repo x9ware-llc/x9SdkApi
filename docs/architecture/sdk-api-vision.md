@@ -6,6 +6,70 @@ X9Ware LLC • May 8, 2026
 
 **DRAFT — under active design.** This document is a vision, not a charter. It articulates the destination and the principles that lead the design there, and explicitly does not pin specific class signatures, method names, or implementation sequencing.
 
+## Working Notes — Synthesis as of May 8, 2026 (NOT part of the final vision; captures discussion state for the upcoming rewrite)
+
+These notes record the position Ryan and Claudius have reached through discussion of Topic 1 (Spring positioning) and Topic 2 (charter overview) before Topic 3 (substrate review) begins. They will be folded into the rewrite of this document and removed from the published version. Authoring constraints follow at the end.
+
+### Audience and document length
+
+- Lowell is the primary reader. He is the founder of X9Ware, a self-taught Java developer with 14 years as a lone developer here, prior career as a mainframe systems programmer and bank executive/manager. He has limited exposure to broader Java community vocabulary; concrete code carries more weight than abstract jargon. The 4/28 email Ryan sent named the modernization themes (interface-based design, JavaBeans, observability hooks, modern threading, Spring-ecosystem compatibility, containerization), so Lowell is not seeing this proposal cold.
+- Lowell explicitly invited "a better idea entirely" in his 4/28 message and later asked Ryan to "shoot holes in the engine based design." Direct critique is welcome; deference is not.
+- Target length: 4–8 pages, ~6 pages preferred. Executive summary up front serves as the under-a-page elevator pitch. Body earns the rest of the length by adding substance the summary cannot carry.
+- Calibrate vocabulary to Lowell's background but keep "ceremony" (Ryan asked); explain through before/after code rather than through framework conventions Lowell may not recognize.
+
+### Spring positioning (Topic 1 outcome)
+
+- **In 2026, Spring ecosystem compatibility is table stakes for enterprise Java integrations.** Market data: 55–60% of enterprise Java workloads on Spring Boot, ~92% of enterprise backend job postings, dominant in regulated sectors (banking, healthcare). Quarkus / Micronaut are real but bounded; their differentiators (cold start, memory footprint) do not translate to file-processing workloads. Losses from a Spring choice are small in X9Ware's specific market.
+- Working framing for the vision: "Market analysis tells us Spring ecosystem compatibility is table stakes in 2026, but we should also decide whether x9SdkApi itself is built on top of Spring Framework. x9Sdk will remain a framework-neutral option and carry no additional open source dependencies. X9Ware will soon be embarking on Spring Boot application development with X9Collector and will therefore need capabilities to efficiently build and release quality software to quickly remediate open source vulnerabilities."
+- **Spring Framework vs. Spring Boot is a real fork.** Spring Framework is the library substrate (DI, Resource, ConversionService, transactions). Spring Boot is the application framework above it (autoconfiguration, starters, actuator). For x9SdkApi as a library, Spring Framework is the right depth.
+- **Spring Boot AutoConfiguration is a meaningful customer-facing win** — it can collapse the X9SdkApplication setup from ~5 lines to zero. That alone may justify a thin Spring Boot starter as a companion artifact to x9SdkApi. To be developed further; do not name "starter" terminology in the vision since Lowell has not used it.
+- **Java floor split:** x9Sdk stays Java 8 (existing 18 customers depend on this). x9SdkApi targets Java 17 (or 21) — Spring Framework 6.x and Boot 3.x require Java 17, and the dual-API model already preserves the Java 8 path for customers who need it.
+- **Decision is not yet made.** The vision presents this as a decision to make, not a decision made, but the reasoning leans toward Spring Framework as the floor for x9SdkApi.
+
+### Customer base context
+
+- Existing 18 SDK customers came in over 10+ years and use the legacy x9Sdk surface (X9SdkBase / X9Writer / X9SdkIO). Their tech stacks reflect that era; they are not the audience for x9SdkApi.
+- New prospects in 2026 are predominantly Cloud + Spring Boot. They are the audience for x9SdkApi.
+- The dual-API model is not "old API + new API" abstractly; it is "old customers stay on x9Sdk + new customers use x9SdkApi" with the era cleanly separating them. **The escape hatch from x9SdkApi already exists — it is x9Sdk.**
+
+### Engine reframe (Topic 2 outcome)
+
+- **Engines belong in x9SdkApi, not in x9Sdk.** Engines are weeks old (Lowell renamed 38 classes in commit `4bc29141`); they are not legacy. The 18 existing customers use the legacy direct-construction surface, not Engines. Putting Engines in x9Sdk and saying "x9SdkApi recommends you skip past them" is the wrong message — it makes Engines sound retrofitted or broken.
+- **Engines should conform to x9SdkApi's design language.** Spring-friendly (interface-based public surface), JavaBean conventions on result objects, customer ergonomics (minimal cognitive load), pipeline composability surfaced explicitly.
+- The work is not "build a facade above Engines." The work is "make Engines themselves feel native to x9SdkApi." Improvements to Engines are charter revisions Lowell can react to, not workarounds.
+
+### Charter critique points to surface honestly
+
+These are points where Lowell's charter and the x9SdkApi design language diverge. Each deserves direct engagement in the vision doc, not papered over:
+
+- **Dialect-concrete return types from factories.** Charter chose `X9WriteEngine.x937(app)` returning `X9WriteEngine937` for compile-time builder visibility. Lowell himself reacted against `X9ValidateEngine937 validateEngine = ...` on Wednesday as "dialect specific assignment, which seems to go against standard generic usage." Possible paths: return abstract base; document `var` as the canonical idiom; auto-detect dialect on read; design so the dialect concrete is rarely captured into a local variable. This is the cleanest place where Lowell's instincts and his charter point in different directions.
+- **X9SdkApplication as customer-visible lifecycle root.** Charter makes this the customer's mental-model anchor; modern Java API expectations push it to be implementation detail handled by the container or by the facade. With Spring Boot AutoConfiguration: zero customer code. Without Spring: ~5 lines of try-with-resources. This is a meaningful divergence from the charter's framing.
+- **`engine.legacy()` accessor.** Charter calls it "the bridge to legacy state." In the artifact split where Engines live in x9SdkApi, there is no "legacy state" to bridge to within x9SdkApi — legacy lives in the parent x9Sdk artifact. The accessor either disappears or is repurposed (e.g., `unsafe()` for power-user operations the surface does not cover).
+- **SLF4J as default.** Charter commits to application-managed SLF4J by default; existing SDK behavior relies on JUL. This is a substantive behavior change for migrating customers and should be acknowledged explicitly, not assumed away. Aligns with how Spring/Hibernate/Jackson behave, which is the right direction.
+- **Javadoc template per Engine.** Policy is right; template content was written before x9SdkApi design-language decisions and is worth revisiting.
+
+### Pipeline composability (positive sales point)
+
+- Read → validate → modify → write composes as a fluent chain. Demos cleanly to prospects in a way the legacy imperative style cannot. Worth highlighting in the vision as a place where Lowell's fluent grammar and the customer-friendly surface reinforce each other rather than compete. Avoid the word "Camel" (Lowell may not have the reference); name the value as "pipeline composition" or "chained operations."
+
+### X9Collector framing (do not overstate)
+
+- X9Collector is a Spring Boot server-based product that consolidates files from distributed capture points at financial institutions. It is one customer of x9SdkApi, not a generic protocol facade over a service catalog. Frame it as evidence X9Ware will have a Spring footprint regardless, which means the engineering capability to manage Spring dependencies and CVE remediation is needed regardless of the x9SdkApi Spring decision.
+- **Do not weight X9Collector above paying customers.** Their needs come first; X9Ware's internal product needs are an organizational consequence, not a tipping factor.
+
+### Artifact split (working synthesis)
+
+- **x9Sdk** = legacy direct-construction API the existing 18 customers depend on (X9SdkBase, X9Writer, X9SdkIO, etc.). Framework-neutral. No new OSS dependencies. Java 8. Continues unchanged.
+- **x9SdkApi** = the modern API. Engines live here, conforming to one design language. Spring Framework as the substrate (decision pending). Java 17 (or 21) floor. Possibly a thin Spring Boot AutoConfiguration companion artifact.
+
+### Authoring constraints for the rewrite
+
+- Read `C:\Users\X9ware7\Downloads\sdk-fluent-api-charter-review.md` before rewriting. That is Claudius's prior review of the charter, written earlier in this session and shared with Lowell on 4/28. Build on it where the prior thinking holds; explicitly mark where our thinking has evolved (and why) so Lowell can see the progression rather than feel contradicted.
+- Include direct before/after code comparisons. Concrete code is the universal language; prose framing serves the code, not the other way around.
+- Do not introduce Spring Boot starter terminology. Lowell has not used Boot starters; explain *what AutoConfiguration removes* (customer setup code) rather than *how it works*.
+- Be explicit that the document is a vision/draft proposal, not a final design.
+- Hold target length at 4–8 pages, ~6 preferred. Executive summary up front. The current 336-line draft is over budget and needs a real cut, not just a polish pass.
+
 ## Purpose and scope
 
 This document is a **vision** for what the X9Ware SDK API should look like in 2026 and the principles that govern the design choices to get there. It is one level above a charter: a charter locks rules and conventions for a specific dimension of the work, and one or more charters follow naturally from this vision.
