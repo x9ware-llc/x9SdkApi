@@ -37,6 +37,8 @@ These notes record the position Ryan and Claudius have reached through discussio
 - **Engines belong in x9SdkApi, not in x9Sdk.** Engines are weeks old (Lowell renamed 38 classes in commit `4bc29141`); they are not legacy. The 18 existing customers use the legacy direct-construction surface, not Engines. Putting Engines in x9Sdk and saying "x9SdkApi recommends you skip past them" is the wrong message — it makes Engines sound retrofitted or broken.
 - **Engines should conform to x9SdkApi's design language.** Spring-friendly (interface-based public surface), JavaBean conventions on result objects, customer ergonomics (minimal cognitive load), pipeline composability surfaced explicitly.
 - The work is not "build a facade above Engines." The work is "make Engines themselves feel native to x9SdkApi." Improvements to Engines are charter revisions Lowell can react to, not workarounds.
+- **Engine-centric, not facade-centric, not file-centric.** Lowell's Wednesday critique of our example was that it looked "essentially x9utilities" — a file-shaped batch verb rather than embeddable application code. His mental model: the Engine is the starting point; source (file, stream, programmatic items) is configuration on the Engine; lifecycle is startup → populate options → run → shutdown. The customer's first 5 lines lead with the Engine, not with a file or facade.
+- **Source flexibility is a design property, not an enumeration.** The API supports any source by construction. Worked examples should show file and stream (the most common cases); the design language carries the rest implicitly.
 
 ### Charter critique points to surface honestly
 
@@ -45,12 +47,39 @@ These are points where Lowell's charter and the x9SdkApi design language diverge
 - **Dialect-concrete return types from factories.** Charter chose `X9WriteEngine.x937(app)` returning `X9WriteEngine937` for compile-time builder visibility. Lowell himself reacted against `X9ValidateEngine937 validateEngine = ...` on Wednesday as "dialect specific assignment, which seems to go against standard generic usage." Possible paths: return abstract base; document `var` as the canonical idiom; auto-detect dialect on read; design so the dialect concrete is rarely captured into a local variable. This is the cleanest place where Lowell's instincts and his charter point in different directions.
 - **X9SdkApplication as customer-visible lifecycle root.** Charter makes this the customer's mental-model anchor; modern Java API expectations push it to be implementation detail handled by the container or by the facade. With Spring Boot AutoConfiguration: zero customer code. Without Spring: ~5 lines of try-with-resources. This is a meaningful divergence from the charter's framing.
 - **`engine.legacy()` accessor.** Charter calls it "the bridge to legacy state." In the artifact split where Engines live in x9SdkApi, there is no "legacy state" to bridge to within x9SdkApi — legacy lives in the parent x9Sdk artifact. The accessor either disappears or is repurposed (e.g., `unsafe()` for power-user operations the surface does not cover).
-- **SLF4J as default.** Charter commits to application-managed SLF4J by default; existing SDK behavior relies on JUL. This is a substantive behavior change for migrating customers and should be acknowledged explicitly, not assumed away. Aligns with how Spring/Hibernate/Jackson behave, which is the right direction.
+- **SLF4J as default — smaller change than the charter implies, but with a caveat.** SDK *runtime* code already uses SLF4J everywhere (verified — no `java.util.logging` imports anywhere in x9Sdk). The JUL coupling lives in `x9SysTools` logging package — `X9JdkLogger`, `X9LogConsoleFormatter`, `X9LogFileFormatter`, `X9LogConsoleHandler` — which examples and X9Assist call as `X9JdkLogger.initializeLoggingEnvironment()` to wire JUL underneath SLF4J. The actual change is whether the modern API calls `X9JdkLogger.initializeLoggingEnvironment()` (current example behavior) or not (well-behaved-library default). **Caveat:** Ryan suspects existing code may depend on JUL-specific format features (line numbers etc.) — needs to be verified before claiming "logback or any other binding works fine."
 - **Javadoc template per Engine.** Policy is right; template content was written before x9SdkApi design-language decisions and is worth revisiting.
+- **`X9File extends java.io.File` is a structural mismatch with source-flexible design.** Hard tie to `java.io.File` encodes the file assumption into the type system — cloud storage (S3, Azure Blob), Spring `Resource`, `java.nio.file.Path`, and stream-only inputs all become second-class. The modern API's source/sink abstraction cannot be `X9File`-rooted. X9File becomes implementation detail customers do not see.
+- **X9Object exposure to customer code.** X9Object is internally a memory-optimized record representation (raw byte arrays, linked-list via X9ObjectManager) — designed for memory efficiency on large files, not for customer ergonomics. Examples confirm customers walk X9Object directly (`getFirst`/`getNext`/`getPrev`, type wrappers, byte-array mutation) — that is a layer customers should not be writing code in. The customer-facing type is `X9Item937` (and equivalents); X9Object stays internal.
 
 ### Pipeline composability (positive sales point)
 
 - Read → validate → modify → write composes as a fluent chain. Demos cleanly to prospects in a way the legacy imperative style cannot. Worth highlighting in the vision as a place where Lowell's fluent grammar and the customer-friendly surface reinforce each other rather than compete. Avoid the word "Camel" (Lowell may not have the reference); name the value as "pipeline composition" or "chained operations."
+
+### Substrate review (Topic 3 outcome)
+
+- **The substrate is healthier than expected.** Most "Spring resistance" lives in addressable patterns, not structural ones. The SDK is reasonable Java despite Lowell's self-taught path from Assembler → COBOL → Java; it is the *examples* that look mainframe-flavored (hardcoded paths, `System.exit` in main, `X9Options` global mutation, linked-list traversal). Vision must distinguish these honestly: most of the customer-facing perception gap comes from examples + missing abstractions, not from a broken SDK.
+- **Engines confirmed pre-fluent.** Conventional Java classes after the rename, constructor-DI shaped (`new X9ValidateEngine937(sdkBase, fileAttributes, repairEngine, progressEvent)`). Caveat: Lowell has a pending huge commit that may include some of these changes. The vision describes what the API should be, not the state of the code this week.
+- **`X9SdkApplication` does not exist yet.** It is a proposal in the charter, not actual code. Whatever it should look like in x9SdkApi, we shape it from the start (no migration burden).
+- **Customer-facing Spring-resistance points (refined to bleed-through-only).** Do not surface internal-only patterns; only those that bleed into customer code:
+  1. The seven-step preamble (~50 lines of invariant boilerplate per example, every customer hits this)
+  2. `java.io.File` hard ties via X9File — customers in cloud-storage scenarios cannot use the SDK ergonomically
+  3. X9Object linked-list as a customer pattern — examples show customers walking it directly; modern API expectations are typed-item streaming or list iteration
+  4. Direct `new` of Engines, no factory interface — DI-resistant
+  5. Concrete-class public types — fine for constructor injection but limit substitution and testing patterns
+  6. License key embedded as a hex compile-time constant in `X9RuntimeLicenseKey` — resists multi-tenant, evaluation, and rotation scenarios
+- **What is *not* customer-facing pain (do not over-claim):** synchronized methods on X9SdkBase, static initialization in X9MessageManager, internal `X9Options` references inside SDK code. These are real but stay internal; the vision should not list them as customer concerns.
+- **`X9AchWriter` missing `addItem(X9ItemAch)`.** Confirmed by `X9ConstructAch.java` (447 lines) which builds CSV arrays manually as a workaround. The charter's plan to add this is well-motivated by real customer pain.
+- **x9SysTools is already Spring-safe.** No static initializers touching global state, no JVM property writes at class load, SLF4J is the substrate. Opaque infrastructure dependency for x9SdkApi; classes do not surface in the public API.
+
+### Strategic framing (Lowell's words, our extension)
+
+- **Adopt "think big / deliver big" as the operating principle, named in the doc.** This is Lowell's phrase; using it grounds the vision in his strategic posture rather than imposing one.
+- **The AI-disruption lens makes incrementalism a losing strategy.** Lowell tells Ryan that AI lets us build anything we can dream of, but it also makes him concerned about disruption — competitors with the same AI tools can match incremental moves. Differentiation has to be in the *destination*, not the velocity. The vision earns its scope by being a destination worth aiming for.
+- **The "would you write this yourself" test as the design north star.** If a developer evaluating us thinks "yes, this is what I would build," we win. If they think "this is what an enterprise SDK looks like," we lose.
+- **Build on Lowell's existing competitive framing in the charter.** Strong passages already exist: "The core APIs need to look rational and, more importantly, better than anything else the technical teams from potential new customers are considering" and "A contemporary API surface that compares cleanly against modern SDKs in the financial messaging space." The vision adds the 2026-specific lens — what "looking better" actually means in 2026 (interface-based, Spring-friendly, JavaBean conventional, stream-first, observable, container-ready, virtual-thread-compatible, AutoConfiguration-eligible).
+- **Lowell's Wednesday critique paraphrased (not direct quote).** Our example "looked essentially like x9utilities" — a file-shaped batch verb, not embeddable application code. He raised stream support and database-built x9 file scenarios as illustrations of source flexibility (not a checklist of cases the vision must demonstrate). His mental model: Engines have their own API; source is configuration; lifecycle is startup → options → run → shutdown.
+- **The competition is open-source and commercial.** Open-source integration libraries (Apache Camel and similar) and commercial check-processing SDKs both compete with X9Ware. The bar is "developers would write this themselves" — that is the differentiation play.
 
 ### X9Collector framing (do not overstate)
 
@@ -69,6 +98,9 @@ These are points where Lowell's charter and the x9SdkApi design language diverge
 - Do not introduce Spring Boot starter terminology. Lowell has not used Boot starters; explain *what AutoConfiguration removes* (customer setup code) rather than *how it works*.
 - Be explicit that the document is a vision/draft proposal, not a final design.
 - Hold target length at 4–8 pages, ~6 preferred. Executive summary up front. The current 336-line draft is over budget and needs a real cut, not just a polish pass.
+- **Worked examples must be Engine-centric, not file-centric.** Lead with the Engine; show source as configuration on the Engine. No `x9.validate(file)` shorthand. No utility-shaped `process(inputFile, outputFile)` patterns. Show file and stream as sources; do not enumerate every source type one by one.
+- **Examples must not name `X9File` or `X9Object` in customer-facing code.** Those are implementation detail. Use `Path` or `InputStream` as input types; use `X9Item937` (or equivalents) as the typed-item customer surface.
+- **Lead the vision with strategic framing ("think big / deliver big," AI-disruption, "would you write this yourself" test).** The competitive case earns the scope; the technical proposals follow from it.
 
 ## Purpose and scope
 
