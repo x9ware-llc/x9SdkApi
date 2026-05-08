@@ -1115,7 +1115,7 @@ public final class X9VerifyX9 {
 
 ### 3. Fluent (charter + x9SdkApi design language)
 
-Same Engine grammar as form 2, refined to the design language this vision adds: `X9SdkApplication` typed as the public interface (implementation is the builder's product); `var` hides the dialect-concrete locally; `Path` source instead of `File`; JavaBean-conventional summary access. Still no Spring — the customer constructs the application in a small builder block.
+Same Engine grammar as form 2, refined to the design language this vision adds: `X9SdkApplication` typed as the public interface; `var` hides dialect-concrete locals; `Path` source instead of `File`; the Engine chain runs inline (no separate `validator` / `modifier` capture); transform lambda compressed. Still no Spring — the customer constructs the application in a small builder block.
 
 ```java
 package com.x9ware.examples;
@@ -1143,39 +1143,29 @@ public final class X9VerifyX9 {
             LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
             System.exit(1);
         }
-        final String licenseKey = args[0];
         final Path inputPath = Path.of(args[1]);
         final Path outputPath = Path.of(args[2]);
 
-        try (X9SdkApplication app = X9SdkApplication.builder()
+        try (var app = X9SdkApplication.builder()
                 .applicationName("X9VerifyX9")
-                .licenseKey(licenseKey)
+                .licenseKey(args[0])
                 .build()) {
 
             final var result = X9ValidateEngine.x937(app)
-                    .fromPath(inputPath)
-                    .validateTiffImages(true)
-                    .run();
+                    .fromPath(inputPath).validateTiffImages(true).run();
             LOGGER.info("validation: errorCount={} severity={}",
                     result.getErrorCount(), result.getSeverity());
 
-            final var itemIndex = new AtomicInteger(0);
-            final var modifySummary = X9ModifyEngine.x937(app)
-                    .fromPath(inputPath)
-                    .toPath(outputPath)
+            final var idx = new AtomicInteger(0);
+            final var summary = X9ModifyEngine.x937(app)
+                    .fromPath(inputPath).toPath(outputPath)
                     .transform(item -> {
-                        int index = itemIndex.getAndIncrement();
-                        if (index == 0) {
-                            item.setAmount(new BigDecimal("88.88"));
-                            return item;
-                        }
-                        if (index == 1) {
-                            return null;
-                        }
-                        return item;
+                        int i = idx.getAndIncrement();
+                        if (i == 0) item.setAmount(new BigDecimal("88.88"));
+                        return i == 1 ? null : item;
                     })
                     .run();
-            LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
+            LOGGER.info("modify: modifiedCount={}", summary.getModifiedCount());
         }
     }
 }
@@ -1183,7 +1173,7 @@ public final class X9VerifyX9 {
 
 ### 4. Modern Spring
 
-Form 3 plus Spring AutoConfiguration: the `X9SdkApplication` is `@Autowired` rather than constructed in a builder block. No setup code. No license argument. The class is a `@Service`, fits naturally into a Spring Boot application's component graph, and runs against any source the customer provides at the call site.
+Form 3 plus Spring AutoConfiguration: `X9SdkApplication` is `@Autowired`. No `main()`. No argument parsing. No try-with-resources around the application. The class is a `@Service` callable from any Spring Boot component; the application's lifecycle is handled by the container.
 
 ```java
 package com.x9ware.examples;
@@ -1200,8 +1190,6 @@ import org.springframework.stereotype.Service;
 import com.x9ware.application.X9SdkApplication;
 import com.x9ware.engines.X9ModifyEngine;
 import com.x9ware.engines.X9ValidateEngine;
-import com.x9ware.summaries.X9ModifySummary;
-import com.x9ware.summaries.X9ValidationResult;
 
 @Service
 public final class X9VerifyX9 {
@@ -1210,36 +1198,22 @@ public final class X9VerifyX9 {
 
     @Autowired X9SdkApplication x9;
 
-    public X9VerifyX9Result verify(final Path inputPath, final Path outputPath) {
-        final X9ValidationResult result = X9ValidateEngine.x937(x9)
-                .fromPath(inputPath)
-                .validateTiffImages(true)
-                .run();
+    public void verify(final Path inputPath, final Path outputPath) {
+        final var result = X9ValidateEngine.x937(x9)
+                .fromPath(inputPath).validateTiffImages(true).run();
         LOGGER.info("validation: errorCount={} severity={}",
                 result.getErrorCount(), result.getSeverity());
 
-        final var itemIndex = new AtomicInteger(0);
-        final X9ModifySummary modifySummary = X9ModifyEngine.x937(x9)
-                .fromPath(inputPath)
-                .toPath(outputPath)
+        final var idx = new AtomicInteger(0);
+        final var summary = X9ModifyEngine.x937(x9)
+                .fromPath(inputPath).toPath(outputPath)
                 .transform(item -> {
-                    int index = itemIndex.getAndIncrement();
-                    if (index == 0) {
-                        item.setAmount(new BigDecimal("88.88"));
-                        return item;
-                    }
-                    if (index == 1) {
-                        return null;
-                    }
-                    return item;
+                    int i = idx.getAndIncrement();
+                    if (i == 0) item.setAmount(new BigDecimal("88.88"));
+                    return i == 1 ? null : item;
                 })
                 .run();
-        LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
-
-        return new X9VerifyX9Result(result, modifySummary);
-    }
-
-    public record X9VerifyX9Result(X9ValidationResult validation, X9ModifySummary modify) {
+        LOGGER.info("modify: modifiedCount={}", summary.getModifiedCount());
     }
 }
 ```
