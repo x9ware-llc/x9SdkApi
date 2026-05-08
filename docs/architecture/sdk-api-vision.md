@@ -154,7 +154,7 @@ The "would you write this yourself" test is the design north star. The dimension
 
 **Interface-based public surface.** Engines and the major lifecycle types expose Java interfaces, not just concrete classes, for the public API. Customers using Spring Framework's dependency injection get clean substitution (test doubles, partial mocks); customers using plain `new` construction lose nothing.
 
-**Lifecycle invisible to the customer.** `X9SdkApplication` exists as the lifecycle root, but customers do not see it in their code. In Spring Boot, AutoConfiguration constructs and wires it as a bean; the customer just `@Autowired`s a bean (typically by interface) and uses it. In plain Java, a small builder block constructs it once and keeps it for the application's lifetime; it does not appear in per-operation code paths. The `X9SdkApplication` concept is real and necessary — but it is the implementation, not the customer's mental model.
+**Lifecycle invisible to the customer.** `X9SdkApplication` is the lifecycle root, exposed as a Java interface. In Spring Boot, AutoConfiguration constructs the implementation and wires it as a bean; the customer `@Autowired`s `X9SdkApplication` and uses it as a parameter to Engine factories. In plain Java, a small builder block constructs an implementation once and keeps it for the application's lifetime; it does not appear in per-operation code paths. The customer never *constructs or manages* `X9SdkApplication`; the container or the builder handles both. Customers who need to substitute their own implementation can do so against the interface.
 
 **Observability seams.** SLF4J for logs (already in place across x9Sdk runtime). Micrometer interfaces for metrics (the customer's existing meter registry is honored). OpenTelemetry-compatible spans on long-running operations. The customer's observability stack — Prometheus, Datadog, New Relic, anything else — works without us picking the backend.
 
@@ -164,28 +164,28 @@ The "would you write this yourself" test is the design north star. The dimension
 
 ## A worked example
 
-Modern Spring Boot service, processing an uploaded check file:
+Modern Spring Boot service, validating an uploaded check file:
 
 ```java
 @Service
 public class CheckProcessor {
-    @Autowired X9SdkApplication x9;  // wired by Spring AutoConfiguration
 
-    public X9WriteSummary process(InputStream upload, X9HeaderXml937 header) {
-        return X9WriteEngine.x937(x9)
+    @Autowired X9SdkApplication x9;
+
+    public X9ValidationResult verify(InputStream upload) {
+        return X9ValidateEngine.x937(x9)
             .fromStream(upload)
-            .header(header)
-            .toBytes()
+            .validateTiffImages(true)
             .run();
     }
 }
 ```
 
-Five lines including the method signature. No setup code. No license registration. No XML configuration loading. No dialect bind. No image folder setting. No trailer-repair flag. No `try-with-resources` around an SdkIO. The customer types the Engine and the operation; everything else is handled by Spring AutoConfiguration plus the Engine's defaults.
+Nine lines including the class declaration and method signature. No setup code. No license registration. No XML configuration loading. No dialect bind. No image folder setting. No `try-with-resources` around an SdkIO. The customer types the Engine and the operation; everything else is handled by Spring AutoConfiguration plus the Engine's defaults.
 
-What this replaces: a roughly seventy-line preamble that opens every example today, plus a fifteen-to-twenty-line imperative I/O loop with manual trailer recomputation. The compression is real because the modern API absorbs invariant boilerplate that customers literally never vary.
+What this replaces: a roughly seventy-line preamble that opens every example today, plus the imperative I/O loop and manual heap walks that follow it. The Appendix shows the full contrast end-to-end against the current 760-line `X9VerifyX9.java`.
 
-The same Engine accepts a `Path` source instead of a stream, or a programmatic list of items, with no different API shape — just a different builder method (`fromPath`, `fromItems`). Source is configuration on the Engine, not a different API for each source type.
+The same Engine accepts a `Path` source instead of a stream, or a programmatic list of items, with no different API shape — just a different builder method. Source is configuration on the Engine, not a different API for each source type.
 
 ## How this composes with the existing charter
 
@@ -259,6 +259,1052 @@ The vision is expected to be stable for the modernization rollout. Specific sign
 - The Spring ecosystem shifts materially (Spring Framework 7, Spring Boot 4) in ways that change the substrate decision.
 - A competitor ships a check-processing SDK that materially redefines what "looking better in 2026" means and the vision's design language no longer matches.
 - AI tooling changes the bar for "would you write this yourself" — the destination has to keep moving.
+
+## Appendix — Five forms of X9VerifyX9
+
+This appendix shows the same operation — open an X9.37 file, validate it, modify two records, and write a new output — in five forms. The contrast is the point.
+
+The five forms in order:
+
+1. **Legacy / existing** — current `X9VerifyX9.java` from x9SdkExamples
+2. **Fluent (exactly per charter)** — what the charter alone delivers, no Spring
+3. **Fluent (charter + x9SdkApi design language)** — same Engine grammar, refined to the design language this vision adds
+4. **Modern Spring** — design-language fluent surface plus Spring AutoConfiguration
+5. **Facade-shaped** — an earlier modernization sketch where Engines were fully abstracted; included for completeness as the opposite extreme of form 1
+
+### 1. Legacy / existing
+
+The current `X9VerifyX9.java` from `x9SdkExamples`. Seven-step preamble, manual heap walks via `X9ObjectManager.getFirst()/getNext()`, manual byte-array record mutation via type wrappers, manual trailer recomputation, manual stream-to-file copy. 760 lines.
+
+```java
+package com.x9ware.examples;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+import org.slf4j.Logger;
+
+import com.x9ware.actions.X9Exception;
+import com.x9ware.base.X9Item937;
+import com.x9ware.base.X9Object;
+import com.x9ware.base.X9ObjectManager;
+import com.x9ware.base.X9Sdk;
+import com.x9ware.base.X9SdkBase;
+import com.x9ware.base.X9SdkFactory;
+import com.x9ware.base.X9SdkIO;
+import com.x9ware.base.X9SdkObject;
+import com.x9ware.base.X9SdkObjectFactory;
+import com.x9ware.base.X9SdkRoot;
+import com.x9ware.core.X9;
+import com.x9ware.core.X9FileAttributes;
+import com.x9ware.core.X9Reader;
+import com.x9ware.elements.X9C;
+import com.x9ware.error.X9Error;
+import com.x9ware.error.X9ErrorManager;
+import com.x9ware.logging.X9JdkLogger;
+import com.x9ware.logging.X9LoggerFactory;
+import com.x9ware.options.X9Options;
+import com.x9ware.tools.X9D;
+import com.x9ware.tools.X9Decimal;
+import com.x9ware.tools.X9FileIO;
+import com.x9ware.tools.X9FileUtils;
+import com.x9ware.tools.X9Numeric;
+import com.x9ware.tools.X9TempFile;
+import com.x9ware.types.X9Type01;
+import com.x9ware.types.X9Type20;
+import com.x9ware.types.X9Type25;
+import com.x9ware.types.X9Type70;
+import com.x9ware.types.X9Type99;
+import com.x9ware.validate.X9TrailerManager937;
+import com.x9ware.validate.X9ValidateEngine;
+import com.x9ware.validate.X9ValidateEngine937;
+import com.x9ware.validate.X9ValidateTiff;
+
+/**
+ * X9VerifyX9 is a fairly comprehensive example of x9.37 file processing. It includes the ability to
+ * open files, load them to the heap, parse and list various record types, modify records, run the
+ * same rule based validations that are used by our X9Assist desktop application, and write a
+ * modified file back to the file system. This is a good overview of what the SDK can do.
+ *
+ * @author X9Ware LLC. Copyright(c) 2012-2024 X9Ware LLC. All Rights Reserved. This is proprietary
+ *         software as developed and licensed by X9Ware LLC under the exclusive legal right of the
+ *         copyright holder. All licensees are provided the right to use the software only under
+ *         certain conditions, and are explicitly restricted from other specific uses including
+ *         modification, sharing, reuse, redistribution, or reverse engineering.
+ */
+public final class X9VerifyX9 {
+
+	/*
+	 * Private.
+	 */
+	private final X9SdkBase sdkBase = new X9SdkBase();
+	private final X9ObjectManager x9objectManager;
+	private final X9Sdk sdk;
+	private X9Reader x9reader;
+	private X9Type01 x9Type01;
+	private X9Type99 x9Type99;
+
+	/*
+	 * Computed totals (these are based on the actual items and not the trailer totals).
+	 */
+	private int fileBundleCount = 0;
+	private int fileItemCount = 0;
+	private int fileDebitCount = 0;
+	private int fileCreditCount = 0;
+	private BigDecimal fileDebitAmount = BigDecimal.ZERO;
+	private BigDecimal fileCreditAmount = BigDecimal.ZERO;
+
+	/*
+	 * Trailer totals (taken from the file control trailer record).
+	 */
+	private int trailerCashLetterCount;
+	private int trailerTotalRecordCount;
+	private int trailerTotalItemCount;
+	private BigDecimal trailerFileTotalAmount;
+
+	/*
+	 * Constants.
+	 */
+	private static final String X9VERIFYX9 = "X9VerifyX9";
+
+	/**
+	 * Logger instance.
+	 */
+	private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
+
+	/*
+	 * X9VerifyX9 Constructor.
+	 */
+	public X9VerifyX9() {
+		/*
+		 * Set the runtime license key (this class is part of sdk-examples). X9RuntimeLicenseKey
+		 * must be updated with the license key text provided for your evaluation.
+		 */
+		X9RuntimeLicenseKey.setLicenseKey();
+
+		/*
+		 * Initialize the environment and bind to an x9.37 configuration.
+		 */
+		X9SdkRoot.logStartupEnvironment(X9VERIFYX9);
+		X9SdkRoot.loadXmlConfigurationFiles();
+		sdk = X9SdkFactory.getSdk(sdkBase);
+		if (!sdkBase.bindConfiguration(X9.X9_37_CONFIG)) {
+			throw new X9Exception("bind unsuccessful");
+		}
+		x9objectManager = sdkBase.getObjectManager();
+	}
+
+	/**
+	 * Load the x9.37 file, run the validator, and list all errors.
+	 */
+	private void process() {
+		/*
+		 * Define our test file and ensure it exists.
+		 */
+		final File folder = new File("C:/Users/X9Ware5/Documents/x9_assist/files");
+		final File inputX9File = new File(folder,
+				"Test file with 10 checks and type 68 records.x9");
+		if (X9FileUtils.existsWithPathTracing(inputX9File)) {
+			LOGGER.info("processing x9file({})", inputX9File);
+		} else {
+			throw new X9Exception("x9file not found({})", inputX9File);
+		}
+		
+		/*
+		 * Read the x9.37 file, populate x9objects, and validate tiff images. This example reads an
+		 * input file, but you can also use sdkIO.openInputReader() to read from an input stream.
+		 */
+		try {
+			/*
+			 * Load and validate from an input file.
+			 */
+			final boolean hasRecords = loadAndValidateFromInputFile(inputX9File);
+
+			/*
+			 * Provide summary information when the file is not structurally flawed.
+			 */
+			if (hasRecords) {
+				/*
+				 * Gather file content.
+				 */
+				gatherFileContent();
+
+				LOGGER.info(
+						"file data totals: bundleCount({}) itemCount({}) debitCount({}) "
+								+ "creditCount({}) debitAmount({}) creditAmount({}) "
+								+ "debitAmount({}) creditAmount",
+						fileBundleCount, fileItemCount, fileDebitCount, fileCreditCount,
+						fileDebitAmount, fileItemCount, fileDebitCount, fileCreditCount,
+						fileDebitAmount, fileCreditAmount);
+				LOGGER.info(
+						"trailerCashLetterCount({}) trailerTotalRecordCount({}) "
+								+ "trailerTotalItemCount({}) trailerFileTotalAmount({})",
+						trailerCashLetterCount, trailerTotalRecordCount, trailerTotalItemCount,
+						trailerFileTotalAmount);
+
+				/*
+				 * List some records in their native 80+ byte format.
+				 */
+				int loggingCount = 0;
+				X9Object x9o = x9objectManager.getFirst();
+				while (x9o != null && loggingCount < 10) {
+					loggingCount++;
+					LOGGER.info("recordType({}) recordNumber({}) content({})", x9o.x9ObjType,
+							x9o.x9ObjIdx, new String(x9o.x9ObjData));
+					x9o = x9o.getNext();
+				}
+
+				/*
+				 * List validation errors.
+				 */
+				listErrorsToLog();
+
+				/*
+				 * Modify some records and write to another output file.
+				 */
+				try {
+					modifysRecordAndWrite(new File(folder, "test.x9"));
+					LOGGER.info("finished");
+				} catch (final Exception ex) {
+					throw new X9Exception(ex);
+				} finally {
+					sdkBase.systemReset(); // release all sdkBase storage
+				}
+			}
+		} catch (final Exception ex) {
+			throw new X9Exception(ex);
+		}
+	}
+
+	/*
+	 * Load and validate an x9.37 file.
+	 *
+	 * @param x9InputFile input file to be loaded and validated
+	 *
+	 * @return true if the file contains records otherwise false
+	 */
+	private boolean loadAndValidateFromInputFile(final File x9InputFile) {
+		/*
+		 * Read the input file, but you can also use sdkIO.openInputReader() to read from a stream.
+		 */
+		try (final X9SdkIO sdkIO = sdk.getSdkIO();
+				final X9Reader allocated_Reader = sdkIO.openInputFile(x9InputFile)) {
+			/*
+			 * Allocate a tiff validator instance (we validate tiff images as the file is read).
+			 */
+			x9reader = allocated_Reader;
+			final X9ValidateTiff x9validateTiff = new X9ValidateTiff(sdkBase);
+
+			/*
+			 * Read and store records until end of file.
+			 */
+			X9SdkObject sdkObject = sdkIO.readNext();
+			final X9FileAttributes x9fileAttributes = sdkIO.getInputFileAttributes();
+			while (sdkObject != null) {
+				/*
+				 * Create and store a new x9object for this x9.37 record.
+				 */
+				final X9Object x9o = sdkIO.createAndStoreX9Object();
+				x9reader.finalizeReaderErrors(x9o);
+
+				/*
+				 * Attach the image byte array directly to this x9object.
+				 */
+				if (x9o.isRecordType(X9.IMAGE_VIEW_DATA)) {
+					final byte[] imageArray = x9reader.getImageBuffer();
+					if (imageArray != null) {
+						x9o.setDirectlyAttachedImage(imageArray);
+					}
+				}
+
+				/*
+				 * Validate tiff images while the file is being read. Any error messages are queued
+				 * and will be subsequently picked up by the validator.
+				 */
+				if (sdkObject.getRecordType() == X9.IMAGE_VIEW_DATA) {
+					x9validateTiff.validateIncomingImage(x9o, x9reader.getImageBuffer());
+				}
+
+				/*
+				 * Get next record.
+				 */
+				sdkObject = sdkIO.readNext();
+			}
+
+			/*
+			 * Validate the file when the reader was successful.
+			 */
+			if (x9objectManager.getNumberOfRecords() > 0) {
+				/*
+				 * Assign x9header indexes.
+				 */
+				x9objectManager.assignHeaderObjectIndexReferences();
+
+				/*
+				 * Create a validator instance and verify the file from the x9objects.
+				 */
+				X9Options.applyAbaFrbDistrictValidation = true;
+				final X9ValidateEngine x9validateEngine = new X9ValidateEngine937(sdkBase,
+						x9fileAttributes);
+				x9validateEngine.verifyFile();
+
+				/*
+				 * Log validation statistics.
+				 */
+				final X9ErrorManager x9errorManager = sdkBase.getErrorManager();
+				LOGGER.info(
+						"validation completed recordCount({}) errorCount({}) highestSeverity({})",
+						x9validateEngine.getX9RecordCount(), x9errorManager.getTotalRunErrors(),
+						x9errorManager.getRunSeverity());
+			}
+		} catch (final Exception ex) {
+			LOGGER.error("validation exception", ex);
+		}
+
+		/*
+		 * Return true when the file has one or more records.
+		 */
+		return x9objectManager.getNumberOfRecords() > 0;
+	}
+
+	/**
+	 * Gather file content.
+	 */
+	private void gatherFileContent() {
+		/*
+		 * Get the first and last records within the file, which obtains the first and last physical
+		 * records regardless of actual record type. If there is only one record on the file, then
+		 * test two references would actually point to the same record.
+		 */
+		final X9Object fileHeader = x9objectManager.getFirst(); // file header is expected
+		final X9Object x9last = x9objectManager.getLast(); // file trailer is expected
+
+		/*
+		 * Abort if record instances were not found. These can only be null when the file did not
+		 * contain at least one record. If the caller does not want this abort, then they should
+		 * check the record count before they invoke us.
+		 */
+		if (fileHeader == null) {
+			throw new X9Exception("first record not found");
+		}
+
+		if (x9last == null) {
+			throw new X9Exception("last record not found");
+		}
+
+		/*
+		 * The file header is absolutely needed; we cannot continue without it.
+		 */
+		if (fileHeader.x9ObjType != X9.FILE_HEADER) {
+			throw new X9Exception("first record not fileHeader({})", fileHeader.x9ObjType);
+		}
+
+		/*
+		 * List file header.
+		 */
+		x9Type01 = new X9Type01(fileHeader);
+		LOGGER.info(
+				"file header: standardLevel({}) testFileIndicator({}) "
+						+ "immediateDestinationRoutingNumber({}) immediateDestinationName({}) "
+						+ "immediateOriginRoutingNumber({}) immediateOriginName({}) "
+						+ "fileCreationDate({}) fileCreationTime{}) resendIndicator({}) "
+						+ "fileIdModifier({}) countryCode({}) ucdIndicator({})",
+				x9Type01.standardLevel, x9Type01.testFileIndicator,
+				x9Type01.immediateDestinationRoutingNumber, x9Type01.immediateDestinationName,
+				x9Type01.immediateOriginRoutingNumber, x9Type01.immediateOriginName,
+				x9Type01.fileCreationDate, x9Type01.fileCreationTime, x9Type01.resendIndicator,
+				x9Type01.fileIdModifier, x9Type01.countryCode, x9Type01.ucdIndicator);
+
+		/*
+		 * Create the file trailer type 9 instance when the last record is of proper type.
+		 */
+		final X9Object fileTrailer;
+		if (x9last.x9ObjType == X9.FILE_CONTROL_TRAILER) {
+			fileTrailer = x9last;
+			x9Type99 = new X9Type99(fileTrailer);
+		} else {
+			fileTrailer = null;
+			x9Type99 = null;
+			LOGGER.warn("last record not fileControlTrailer({})", x9last.x9ObjType);
+		}
+
+		/*
+		 * List file trailer.
+		 */
+		if (x9Type99 != null) {
+			LOGGER.info(
+					"file trailer: cashLetterCount({}) totalRecordCount({}) totalItemCount({}) "
+							+ "fileTotalAmount({}) immediateOriginContactName({}) "
+							+ "immediateOriginContactPhoneNumber({})",
+					x9Type99.cashLetterCount, x9Type99.totalRecordCount, x9Type99.totalItemCount,
+					x9Type99.fileTotalAmount, x9Type99.immediateOriginContactName,
+					x9Type99.immediateOriginContactPhoneNumber);
+		}
+
+		/*
+		 * List bundles.
+		 */
+		X9Object x9o = x9objectManager.getFirst();
+		while (x9o != null) {
+			if (x9o.isBundleHeader()) {
+				final X9Type20 x9Type20 = new X9Type20(x9o);
+				LOGGER.info(
+						"bundle header:  collectionTypeIndicator({}) destinationRoutingNumber({}) "
+								+ "eceInstitutionRoutingNumber({}) bundleBusinessDate({}) "
+								+ "bundleCreationDate({}) bundleIdentifier({}) "
+								+ "bundleSequenceNumber({}) cycleNumber({}) "
+								+ "returnLocationRoutingNumber({}) bundleCreationTime({})",
+						x9Type20.collectionTypeIndicator, x9Type20.destinationRoutingNumber,
+						x9Type20.eceInstitutionRoutingNumber, x9Type20.bundleBusinessDate,
+						x9Type20.bundleCreationDate, x9Type20.bundleIdentifier,
+						x9Type20.bundleSequenceNumber, x9Type20.cycleNumber,
+						x9Type20.returnLocationRoutingNumber, x9Type20.bundleCreationTime);
+				final List<X9Item937> itemList = listBundleContent(x9o);
+				LOGGER.info("bundle item Count({})", itemList.size());
+			}
+			x9o = x9o.getNext();
+		}
+
+		/*
+		 * Set trailer record counts and amounts when present.
+		 */
+		if (x9Type99 == null) {
+			trailerCashLetterCount = 0;
+			trailerTotalRecordCount = 0;
+			trailerTotalItemCount = 0;
+			trailerFileTotalAmount = BigDecimal.ZERO;
+		} else {
+			trailerCashLetterCount = X9Numeric.toInt(x9Type99.cashLetterCount);
+			trailerTotalRecordCount = X9Numeric.toInt(x9Type99.totalRecordCount);
+			trailerTotalItemCount = X9Numeric.toInt(x9Type99.totalItemCount);
+			trailerFileTotalAmount = X9Decimal.getAsAmount(x9Type99.fileTotalAmount);
+		}
+	}
+
+	/**
+	 * List bundle content.
+	 * 
+	 * @param bundleHeader
+	 *            current bundle header
+	 * @return item list for this bundle
+	 */
+	private List<X9Item937> listBundleContent(final X9Object bundleHeader) {
+		/*
+		 * Abort if the bundle header is not as expected.
+		 */
+		if (bundleHeader == null) {
+			throw new X9Exception("currentBundle unexpectedly null");
+		}
+
+		if (!bundleHeader.isBundleHeader()) {
+			throw new X9Exception("currentBundle is incorrect recordType({})",
+					bundleHeader.x9ObjType);
+		}
+
+		/*
+		 * Accumulate all items within the provided bundle.
+		 */
+		final List<X9Item937> itemList = new ArrayList<>();
+		int itemCount = 0;
+		int debitCount = 0;
+		int creditCount = 0;
+		BigDecimal debitAmount = BigDecimal.ZERO;
+		BigDecimal creditAmount = BigDecimal.ZERO;
+		X9Object x9o = bundleHeader.getNext();
+
+		/*
+		 * Count by transaction type.
+		 */
+		while (x9o != null && (x9o.isItem() || x9o.isAddendum())) {
+			if (x9o.isItem()) {
+				itemCount++;
+				if (x9o.isDebit()) {
+					debitCount++;
+					debitAmount = debitAmount.add(x9o.getItemAmount());
+				} else if (x9o.isCredit()) {
+					creditCount++;
+					creditAmount = creditAmount.add(x9o.getItemAmount());
+				}
+
+				/*
+				 * Add to item list for this bundle.
+				 */
+				itemList.add(new X9Item937(x9o));
+			}
+
+			/*
+			 * Get next record.
+			 */
+			x9o = x9o.getNext();
+		}
+
+		/*
+		 * List actual totals for items within this bundle.
+		 */
+		LOGGER.info(
+				"bundle content: itemCount({}) debitCount({}) creditCount({}) debitAmount({}) "
+						+ "creditAmount({})",
+				itemCount, debitCount, creditCount, debitAmount, creditAmount);
+
+		/*
+		 * Accumulate actual data totals, which can be contrasted to the trailer records.
+		 */
+		fileBundleCount++;
+		fileItemCount += itemCount;
+		fileDebitCount += debitCount;
+		fileCreditCount += creditCount;
+		fileDebitAmount = fileDebitAmount.add(debitAmount);
+		fileCreditAmount = fileCreditAmount.add(creditAmount);
+
+		/*
+		 * List the bundle trailer when it exists.
+		 */
+		final X9Object bundleTrailer = x9o != null && x9o.isBundleTrailer() ? x9o : null;
+		final X9Type70 x9Type70 = bundleTrailer != null ? new X9Type70(x9o) : null;
+		if (x9Type70 != null) {
+			LOGGER.info(
+					"bundlebtrailer: itemCount({}) itemAmount({}) micrValidAmount({}) "
+							+ "imageCount({}) creditCount({}) creditAmount({})",
+					x9Type70.itemCount, x9Type70.itemAmount, x9Type70.micrValidAmount,
+					x9Type70.imageCount, x9Type70.creditCount, x9Type70.creditAmount);
+		}
+
+		/*
+		 * Return the list of items for this bundle.
+		 */
+		return itemList;
+	}
+
+	/**
+	 * List all validation errors to the system log.
+	 */
+	private void listErrorsToLog() {
+		final X9ErrorManager x9errorManager = sdkBase.getErrorManager();
+		final Map<String, ArrayList<X9Error>> errorMap = x9errorManager.getErrorMap();
+		if (errorMap.size() == 0) {
+			LOGGER.info("no validation errors");
+		} else {
+			final StringBuilder sb = new StringBuilder();
+			for (final Entry<String, ArrayList<X9Error>> entry : errorMap.entrySet()) {
+				final ArrayList<X9Error> x9errors = entry.getValue();
+				for (final X9Error x9error : x9errors) {
+					sb.setLength(0);
+					sb.append("errorKey(").append(entry.getKey());
+					sb.append(") recordNumber(").append(x9error.getRecordNumber());
+					sb.append(") recordType(").append(x9error.getRecordType());
+					sb.append(") errorName(").append(x9error.getErrorName());
+					sb.append(") severity(").append(x9error.getSeverity());
+					sb.append(") errorFieldName(").append(x9error.getFieldName());
+					sb.append(") errorMessage(").append(x9error.getCollectiveText());
+					sb.append(") errorComments(").append(x9error.getComments());
+					sb.append(")");
+					LOGGER.debug(sb.toString());
+				}
+			}
+		}
+	}
+
+	/**
+	 * Modify a record and write to an output file. New hash totals will be computed automatically.
+	 * 
+	 * @param outputFile
+	 *            output file to be written
+	 */
+	private void modifysRecordAndWrite(final File outputFile) {
+		/*
+		 * Change the amount on the first item and completely remove the second item.
+		 */
+		int modificationCount = 0;
+		X9Object x9o = sdkBase.getFirstObject();
+		while (x9o != null && modificationCount < 2) {
+			if (x9o.isRecordType(X9.CHECK_DETAIL)) {
+				/*
+				 * Modify the amount on this item. If this file contains an offset, then that total
+				 * will not be changed by this logic, and the file will now become out of balance.
+				 */
+				if (modificationCount == 0) {
+					modificationCount++;
+					LOGGER.info("modify recordNumber({}) recordType({}) dataBfore({})",
+							x9o.x9ObjIdx, x9o.x9ObjType, new String(x9o.x9ObjData));
+					final X9Type25 t25 = new X9Type25(x9o);
+					t25.amount = "8888";
+					t25.modify();
+					LOGGER.info("modify recordNumber({}) recordType({}) dataAfter({})",
+							x9o.x9ObjIdx, x9o.x9ObjType, new String(x9o.x9ObjData));
+				} else if (modificationCount == 1) {
+					/*
+					 * Remove this type 25 record, which similarly puts the file out of balance when
+					 * it has an offsetting debit or credit.
+					 */
+					modificationCount++;
+					LOGGER.info("delete recordNumber({}) recordType({}) dataBfore({})",
+							x9o.x9ObjIdx, x9o.x9ObjType, new String(x9o.x9ObjData));
+					x9o.setDeleteStatus(true);
+
+					/*
+					 * Now remove the type 26-52 addenda records that are attached to this type 25.
+					 */
+					x9o = x9o.getNext();
+					while (x9o != null && x9o.isAddendum()) {
+						LOGGER.info("delete recordNumber({}) recordType({}) addenda({})",
+								x9o.x9ObjIdx, x9o.x9ObjType, new String(x9o.x9ObjData));
+						x9o.setDeleteStatus(true);
+						x9o = x9o.getNext();
+					}
+				}
+			}
+			x9o = x9o.getNext();
+		}
+
+		/*
+		 * Update hash counts in the batch trailer and file trailer records.
+		 */
+		final X9TrailerManager937 x9TrailerManager = new X9TrailerManager937(sdkBase);
+		x9o = sdkBase.getFirstObject();
+		while (x9o != null) {
+			x9TrailerManager.accumulateAndPopulate(x9o);
+			x9o = x9o.getNext();
+		}
+
+		/*
+		 * Ensure we modified records as expected.
+		 */
+		if (modificationCount == 2) {
+			/*
+			 * Create a temporary file which will be renamed on completion.
+			 */
+			final X9TempFile x9tempFile = new X9TempFile(outputFile);
+
+			/*
+			 * Write to the temporary output file.
+			 */
+			writeToFile(x9tempFile.getTemp());
+
+			/*
+			 * Rename the output file to final.
+			 */
+			x9tempFile.renameTemp();
+		} else {
+			/*
+			 * Records not modified as expected.
+			 */
+			throw new X9Exception("unexpected modificationCount({})", modificationCount);
+		}
+	}
+
+	/**
+	 * Write records to an output file.
+	 * 
+	 * @param outputFile
+	 *            output file to be written
+	 */
+	private void writeToFile(final File outputFile) {
+		/*
+		 * Initialize counters.
+		 */
+		int debitCount = 0;
+		int creditCount = 0;
+		int recordsWritten = 0;
+		BigDecimal debitTotal = BigDecimal.ZERO;
+		BigDecimal creditTotal = BigDecimal.ZERO;
+
+		/*
+		 * Set sdk writer options.
+		 */
+		final boolean isEbcdic = true;
+		final X9SdkObjectFactory x9sdkObjectFactory = sdkBase.getSdkObjectFactory();
+		x9sdkObjectFactory.setIsOutputEbcdic(isEbcdic);
+		x9sdkObjectFactory.setFieldZeroInserted(true);
+
+		/*
+		 * Write to an output x9.37 file.
+		 */
+		try (final X9SdkIO sdkIO = sdk.getSdkIO()) {
+			/*
+			 * Open output as a file. Note that sdkIO also has methods "openOutputStream()" and
+			 * "openOutputFile()" that can be used based on your requirements.
+			 */
+			final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+			sdkIO.openOutputStream(outputStream, "outputStream"); // open as an output stream
+			// sdkIO.openOutputFile(outputFile); // open as an output file
+
+			/*
+			 * Walk the list and write each x9.
+			 */
+			X9Object x9o = sdkBase.getFirstObject();
+			while (x9o != null) {
+				/*
+				 * Create the sdkObject.
+				 */
+				final X9SdkObject sdkObject = sdkIO.makeOutputRecord(x9o);
+
+				/*
+				 * Increment counts and amounts.
+				 */
+				if (x9o.isDebit()) {
+					debitCount++;
+					debitTotal = debitTotal.add(x9o.getRecordAmount());
+				} else if (x9o.isCredit()) {
+					creditCount++;
+					creditTotal = creditTotal.add(x9o.getRecordAmount());
+				}
+
+				/*
+				 * Write this x9.37 record from the sdkObject.
+				 */
+				recordsWritten++;
+				sdkIO.writeOutputFile(sdkObject);
+
+				/*
+				 * Get the next x9.37 record.
+				 */
+				x9o = x9o.getNext();
+			}
+
+			/*
+			 * Log our statistics.
+			 */
+			LOGGER.info(sdkIO.getSdkStatisticsMessage(outputFile));
+
+			/*
+			 * Copy the output stream to our output file.
+			 */
+			writeOutputStreamToFile(outputStream, outputFile);
+
+			/*
+			 * Write summary message to the log.
+			 */
+			final String characterSet = isEbcdic ? X9C.EBCDIC : X9C.ASCII;
+			LOGGER.info(
+					"outputFile({}) characterSet({}) debitCount({}) debitTotal({}) "
+							+ "creditCount({}) creditTotal({}) recordsWritten({})",
+					outputFile.toString(), characterSet, X9D.formatLong(debitCount),
+					X9D.formatBigDecimal(debitTotal), X9D.formatLong(creditCount),
+					X9D.formatBigDecimal(creditTotal), X9D.formatLong(recordsWritten));
+		} catch (final Exception ex) {
+			throw new X9Exception(ex);
+		}
+	}
+
+	/**
+	 * Write the byte array output stream to an output file.
+	 * 
+	 * @param outputStream
+	 *            constructed byte array output stream
+	 * @param outputFile
+	 *            output file to be written
+	 * @param isAppendPadRecords
+	 *            true if pad records are to be appended
+	 */
+	private void writeOutputStreamToFile(final ByteArrayOutputStream outputStream,
+			final File outputFile) {
+		try {
+			outputStream.flush();
+			outputStream.close();
+			X9FileIO.writeFile(outputStream.toByteArray(), outputFile);
+			LOGGER.info("output written({})", outputFile);
+		} catch (final Exception ex) {
+			throw new X9Exception(ex);
+		}
+	}
+
+	/**
+	 * Main().
+	 *
+	 * @param args
+	 *            command line arguments
+	 */
+	public static void main(final String[] args) {
+		int status = 0;
+		X9JdkLogger.initializeLoggingEnvironment();
+		LOGGER.info(X9VERIFYX9 + " started");
+		try {
+			final X9VerifyX9 x9verify = new X9VerifyX9();
+			x9verify.process();
+		} catch (final Throwable t) { // catch both errors and exceptions
+			status = 1;
+			LOGGER.error("main exception", t);
+		} finally {
+			X9SdkRoot.shutdown();
+			X9JdkLogger.closeLog();
+			System.exit(status);
+		}
+	}
+
+}
+```
+
+### 2. Fluent (exactly per charter)
+
+Charter conventions strictly applied: dialect-concrete return types from static factories, `fromFile(File)` source, single terminal verb `run`, builder block constructing `X9SdkApplication` as `AutoCloseable`. No Spring. Validate and modify expressed as separate Engine pipelines composed in customer code.
+
+```java
+package com.x9ware.examples;
+
+import java.io.File;
+import java.math.BigDecimal;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+
+import com.x9ware.application.X9SdkApplication;
+import com.x9ware.engines.X9ModifyEngine;
+import com.x9ware.engines.X9ModifyEngine937;
+import com.x9ware.engines.X9ValidateEngine;
+import com.x9ware.engines.X9ValidateEngine937;
+import com.x9ware.logging.X9LoggerFactory;
+import com.x9ware.summaries.X9ModifySummary;
+import com.x9ware.summaries.X9ValidationResult;
+
+public final class X9VerifyX9 {
+
+    private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
+
+    private X9VerifyX9() {
+    }
+
+    public static void main(final String[] args) {
+        if (args.length != 3) {
+            LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
+            System.exit(1);
+        }
+        final String licenseKey = args[0];
+        final File inputFile = new File(args[1]);
+        final File outputFile = new File(args[2]);
+
+        try (X9SdkApplication app = X9SdkApplication.builder()
+                .applicationName("X9VerifyX9")
+                .licenseKey(licenseKey)
+                .build()) {
+
+            final X9ValidateEngine937 validator = X9ValidateEngine.x937(app);
+            final X9ValidationResult result = validator
+                    .fromFile(inputFile)
+                    .validateTiffImages(true)
+                    .run();
+            LOGGER.info("validation: errorCount({}) severity({})",
+                    result.getErrorCount(), result.getRunSeverity());
+
+            final AtomicInteger itemIndex = new AtomicInteger(0);
+            final X9ModifyEngine937 modifier = X9ModifyEngine.x937(app);
+            final X9ModifySummary modifySummary = modifier
+                    .fromFile(inputFile)
+                    .toFile(outputFile)
+                    .transform(item -> {
+                        int index = itemIndex.getAndIncrement();
+                        if (index == 0) {
+                            item.setAmount(new BigDecimal("88.88"));
+                            return item;
+                        }
+                        if (index == 1) {
+                            return null;
+                        }
+                        return item;
+                    })
+                    .run();
+            LOGGER.info("modify: modifiedCount({})", modifySummary.getModifiedCount());
+        }
+    }
+}
+```
+
+### 3. Fluent (charter + x9SdkApi design language)
+
+Same Engine grammar as form 2, refined to the design language this vision adds: `X9SdkApplication` typed as the public interface (implementation is the builder's product); `var` hides the dialect-concrete locally; `Path` source instead of `File`; JavaBean-conventional summary access. Still no Spring — the customer constructs the application in a small builder block.
+
+```java
+package com.x9ware.examples;
+
+import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+
+import com.x9ware.application.X9SdkApplication;
+import com.x9ware.engines.X9ModifyEngine;
+import com.x9ware.engines.X9ValidateEngine;
+import com.x9ware.logging.X9LoggerFactory;
+
+public final class X9VerifyX9 {
+
+    private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
+
+    private X9VerifyX9() {
+    }
+
+    public static void main(final String[] args) {
+        if (args.length != 3) {
+            LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
+            System.exit(1);
+        }
+        final String licenseKey = args[0];
+        final Path inputPath = Path.of(args[1]);
+        final Path outputPath = Path.of(args[2]);
+
+        try (X9SdkApplication app = X9SdkApplication.builder()
+                .applicationName("X9VerifyX9")
+                .licenseKey(licenseKey)
+                .build()) {
+
+            final var result = X9ValidateEngine.x937(app)
+                    .fromPath(inputPath)
+                    .validateTiffImages(true)
+                    .run();
+            LOGGER.info("validation: errorCount={} severity={}",
+                    result.getErrorCount(), result.getSeverity());
+
+            final var itemIndex = new AtomicInteger(0);
+            final var modifySummary = X9ModifyEngine.x937(app)
+                    .fromPath(inputPath)
+                    .toPath(outputPath)
+                    .transform(item -> {
+                        int index = itemIndex.getAndIncrement();
+                        if (index == 0) {
+                            item.setAmount(new BigDecimal("88.88"));
+                            return item;
+                        }
+                        if (index == 1) {
+                            return null;
+                        }
+                        return item;
+                    })
+                    .run();
+            LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
+        }
+    }
+}
+```
+
+### 4. Modern Spring
+
+Form 3 plus Spring AutoConfiguration: the `X9SdkApplication` is `@Autowired` rather than constructed in a builder block. No setup code. No license argument. The class is a `@Service`, fits naturally into a Spring Boot application's component graph, and runs against any source the customer provides at the call site.
+
+```java
+package com.x9ware.examples;
+
+import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.x9ware.application.X9SdkApplication;
+import com.x9ware.engines.X9ModifyEngine;
+import com.x9ware.engines.X9ValidateEngine;
+import com.x9ware.summaries.X9ModifySummary;
+import com.x9ware.summaries.X9ValidationResult;
+
+@Service
+public final class X9VerifyX9 {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(X9VerifyX9.class);
+
+    @Autowired X9SdkApplication x9;
+
+    public X9VerifyX9Result verify(final Path inputPath, final Path outputPath) {
+        final X9ValidationResult result = X9ValidateEngine.x937(x9)
+                .fromPath(inputPath)
+                .validateTiffImages(true)
+                .run();
+        LOGGER.info("validation: errorCount={} severity={}",
+                result.getErrorCount(), result.getSeverity());
+
+        final var itemIndex = new AtomicInteger(0);
+        final X9ModifySummary modifySummary = X9ModifyEngine.x937(x9)
+                .fromPath(inputPath)
+                .toPath(outputPath)
+                .transform(item -> {
+                    int index = itemIndex.getAndIncrement();
+                    if (index == 0) {
+                        item.setAmount(new BigDecimal("88.88"));
+                        return item;
+                    }
+                    if (index == 1) {
+                        return null;
+                    }
+                    return item;
+                })
+                .run();
+        LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
+
+        return new X9VerifyX9Result(result, modifySummary);
+    }
+
+    public record X9VerifyX9Result(X9ValidationResult validation, X9ModifySummary modify) {
+    }
+}
+```
+
+### 5. Facade-shaped (for completeness)
+
+An earlier modernization sketch where Engines are fully abstracted behind the facade. The customer reads a `X9File937` from the `X9Context` and operates on it directly via methods like `.validate(...)` and `.write(...)`. Compact in trivial cases, but loses Engine discoverability and pipeline composability — the design opposite extreme of form 1, included so the journey is visible.
+
+```java
+package com.x9ware.examples;
+
+import java.io.IOException;
+
+import org.slf4j.Logger;
+
+import com.x9ware.X9Context;
+import com.x9ware.X9LogManager;
+import com.x9ware.exceptions.X9LicenseException;
+import com.x9ware.io.X9Format;
+import com.x9ware.x937.X9File937;
+import com.x9ware.x937.X9Money;
+import com.x9ware.x937.X9ValidationOptions;
+import com.x9ware.x937.X9ValidationReport;
+import com.x9ware.x937.X9WriteReport;
+
+/**
+ * Open an x9.37 file, validate it, modify two records, and write a new file.
+ *
+ * @author X9Ware LLC. Copyright(c) 2012-2026 X9Ware LLC. All Rights Reserved.
+ */
+public final class X9VerifyX9 {
+
+    private static final Logger LOGGER = X9LogManager.loggerFor(X9VerifyX9.class);
+
+    private X9VerifyX9() {
+    }
+
+    public static void main(final String[] args) throws IOException, X9LicenseException {
+        if (args.length != 3) {
+            LOGGER.error("usage: X9VerifyX9 <license.xml> <input.x9> <output.x9>");
+            System.exit(1);
+        }
+        final String licensePath = args[0];
+        final String inputPath = args[1];
+        final String outputPath = args[2];
+
+        final X9ValidationOptions validationOptions = X9ValidationOptions.builder()
+                .applyAbaFrbDistrictValidation(true)
+                .build();
+
+        try (final X9Context x9Context = X9Context.fromLicenseFile(licensePath)) {
+            final X9File937 x9File = x9Context.read937(inputPath);
+
+            final X9ValidationReport validationReport = x9File.validate(validationOptions);
+            LOGGER.info("validated: {}", validationReport.summary());
+
+            x9File.items().first().setAmount(X9Money.usd("88.88"));
+            x9File.items().remove(1);
+
+            final X9WriteReport writeReport = x9File.write(outputPath, X9Format.EBCDIC);
+            LOGGER.info("wrote: {}", writeReport.summary());
+        }
+    }
+}
+```
 
 ## Related documents
 
