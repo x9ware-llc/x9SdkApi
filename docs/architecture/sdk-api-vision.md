@@ -1115,7 +1115,7 @@ public final class X9VerifyX9 {
 
 ### 3. Fluent (charter + x9SdkApi design language)
 
-Same Engine grammar as form 2, refined to the design language this vision adds: `X9SdkApplication` typed as the public interface; `var` hides dialect-concrete locals; `Path` source instead of `File`; the Engine chain runs inline (no separate `validator` / `modifier` capture); transform lambda compressed. Still no Spring — the customer constructs the application in a small builder block.
+Same Engine grammar and same business logic as form 2, refined by the design moves this vision adds: `X9SdkApplication` typed as the public interface; `var` hides dialect-concrete locals (the customer never types `X9ValidateEngine937`); `Path` source instead of `File` (cloud-friendly, `Resource`-compatible); the Engine chain runs inline (no separate `validator` / `modifier` capture, since the dialect concrete never needs to appear in a customer-typed local). Still no Spring — the customer constructs the application in a small builder block.
 
 ```java
 package com.x9ware.examples;
@@ -1143,29 +1143,39 @@ public final class X9VerifyX9 {
             LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
             System.exit(1);
         }
+        final String licenseKey = args[0];
         final Path inputPath = Path.of(args[1]);
         final Path outputPath = Path.of(args[2]);
 
         try (var app = X9SdkApplication.builder()
                 .applicationName("X9VerifyX9")
-                .licenseKey(args[0])
+                .licenseKey(licenseKey)
                 .build()) {
 
             final var result = X9ValidateEngine.x937(app)
-                    .fromPath(inputPath).validateTiffImages(true).run();
+                    .fromPath(inputPath)
+                    .validateTiffImages(true)
+                    .run();
             LOGGER.info("validation: errorCount={} severity={}",
                     result.getErrorCount(), result.getSeverity());
 
-            final var idx = new AtomicInteger(0);
-            final var summary = X9ModifyEngine.x937(app)
-                    .fromPath(inputPath).toPath(outputPath)
+            final var itemIndex = new AtomicInteger(0);
+            final var modifySummary = X9ModifyEngine.x937(app)
+                    .fromPath(inputPath)
+                    .toPath(outputPath)
                     .transform(item -> {
-                        int i = idx.getAndIncrement();
-                        if (i == 0) item.setAmount(new BigDecimal("88.88"));
-                        return i == 1 ? null : item;
+                        int index = itemIndex.getAndIncrement();
+                        if (index == 0) {
+                            item.setAmount(new BigDecimal("88.88"));
+                            return item;
+                        }
+                        if (index == 1) {
+                            return null;
+                        }
+                        return item;
                     })
                     .run();
-            LOGGER.info("modify: modifiedCount={}", summary.getModifiedCount());
+            LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
         }
     }
 }
@@ -1173,7 +1183,7 @@ public final class X9VerifyX9 {
 
 ### 4. Modern Spring
 
-Form 3 plus Spring AutoConfiguration: `X9SdkApplication` is `@Autowired`. No `main()`. No argument parsing. No try-with-resources around the application. The class is a `@Service` callable from any Spring Boot component; the application's lifecycle is handled by the container.
+Form 3 with the same business logic, but Spring AutoConfiguration takes over the parts of the program that are no longer the customer's concern: the `main()` driver (Spring Boot starts the application), the argument-parsing block (configuration is externalized to `application.yml` properties or method parameters), the `X9SdkApplication.builder()` setup (AutoConfiguration constructs and wires the implementation), and the `try-with-resources` lifecycle (the container's `@PreDestroy` and shutdown hooks close the application). What remains is the actual operation: a `@Service` method callable from anywhere in the Spring Boot component graph.
 
 ```java
 package com.x9ware.examples;
@@ -1200,20 +1210,29 @@ public final class X9VerifyX9 {
 
     public void verify(final Path inputPath, final Path outputPath) {
         final var result = X9ValidateEngine.x937(x9)
-                .fromPath(inputPath).validateTiffImages(true).run();
+                .fromPath(inputPath)
+                .validateTiffImages(true)
+                .run();
         LOGGER.info("validation: errorCount={} severity={}",
                 result.getErrorCount(), result.getSeverity());
 
-        final var idx = new AtomicInteger(0);
-        final var summary = X9ModifyEngine.x937(x9)
-                .fromPath(inputPath).toPath(outputPath)
+        final var itemIndex = new AtomicInteger(0);
+        final var modifySummary = X9ModifyEngine.x937(x9)
+                .fromPath(inputPath)
+                .toPath(outputPath)
                 .transform(item -> {
-                    int i = idx.getAndIncrement();
-                    if (i == 0) item.setAmount(new BigDecimal("88.88"));
-                    return i == 1 ? null : item;
+                    int index = itemIndex.getAndIncrement();
+                    if (index == 0) {
+                        item.setAmount(new BigDecimal("88.88"));
+                        return item;
+                    }
+                    if (index == 1) {
+                        return null;
+                    }
+                    return item;
                 })
                 .run();
-        LOGGER.info("modify: modifiedCount={}", summary.getModifiedCount());
+        LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
     }
 }
 ```
