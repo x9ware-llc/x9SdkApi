@@ -1,0 +1,61 @@
+// Plugin management - configure where to find the conventions plugin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/x9ware-llc/x9GradleConventionsPlugin")
+            credentials {
+                username = settings.ext.find('githubUsername') ?: System.getenv("GITHUB_ACTOR") ?: ""
+                password = settings.ext.find('githubToken') ?: System.getenv("GITHUB_TOKEN") ?: ""
+            }
+        }
+        gradlePluginPortal()
+    }
+}
+
+// Our common root project is x9SdkApi.
+rootProject.name = 'x9SdkApi'
+
+// Conditional composite builds: Use source dependencies in Eclipse, JAR dependencies from command line
+// This allows Eclipse to see source code and provide better IDE features while keeping command-line
+// builds fast and using published artifacts from mavenLocal
+def isEclipseBuild = System.getenv('BUILDSHIP_RUNNING') != null ||
+                     System.getProperty('eclipse.buildId') != null ||
+                     gradle.startParameter.taskNames.any { it.contains('eclipse') }
+
+if (isEclipseBuild) {
+    println "x9ware :x9SdkApi: Eclipse build detected - using composite builds for source dependencies"
+
+    // Include the x9Sdk dependency chain as composite builds for Eclipse navigation
+    def projectRoot = rootProject.projectDir.parentFile
+
+    if (new File(projectRoot, 'x9SysTools').exists()) {
+        includeBuild('../x9SysTools') {
+            dependencySubstitution {
+                substitute module('com.x9ware:x9systools') using project(':')
+            }
+        }
+        println "x9ware :x9SdkApi: Included x9SysTools as composite build"
+    }
+
+    if (new File(projectRoot, 'x9E13bOcr').exists()) {
+        includeBuild('../x9E13bOcr') {
+            dependencySubstitution {
+                substitute module('com.x9ware:x9e13bocr') using project(':')
+            }
+        }
+        println "x9ware :x9SdkApi: Included x9E13bOcr as composite build"
+    }
+
+    if (new File(projectRoot, 'x9Sdk').exists()) {
+        includeBuild('../x9Sdk') {
+            dependencySubstitution {
+                substitute module('com.x9ware:x9sdk') using project(':')
+            }
+        }
+        println "x9ware :x9SdkApi: Included x9Sdk as composite build"
+    }
+} else {
+    println "x9ware :x9SdkApi: Command-line build - using JAR dependencies from mavenLocal"
+}

@@ -1,0 +1,82 @@
+#
+# X9Ware standard settings. 
+# Note that we do not include /license/ since we must have those archived within the Key Generator project. 
+# Also, the definitions below CANNOT be things like /bin/**.* (with wildcards). Suprisingly, that does not work. 
+#
+
+**.jar
+# Exception: Gradle wrapper jar must be committed for reproducible builds
+!**/gradle/wrapper/gradle-wrapper.jar
+**.war
+**.ear
+**.exe
+**.res
+**.class
+**.tmp
+**.bak
+**.log
+**.pdf
+**.csv
+**.odt
+**.xls
+**.xlsx
+**.xlsm
+**.pyc
+.metadata
+.project
+.classpath
+.settings/
+
+#
+# Ignore java modules 
+#
+modules
+
+#
+# Ignore content within various folders 
+#
+/bin/
+/tmp/
+/temp/
+/backup/
+/bin/ 
+/bin/
+/brand/
+/build/
+/doc/
+/files/
+/fonts/ 
+/fossLicenses/
+/help/
+/help/docFiles/
+/help/helpFiles/
+/icons/
+/images/ 
+/invalidImages/ 
+/libs/
+/lists/ 
+/locMetrics/
+/log/
+/properties/ 
+/resource/
+/resources/ 
+/rules/ 
+/target/
+__pycache__/
+*/__pycache__/
+**/__pycache__/
+/.gradle/
+
+# Gradle writes the JAR manifest to build/tmp/jar/MANIFEST.MF and bundles it
+# into the fat JAR. If a JAR is ever extracted to the project root, ignore it.
+/META-INF/
+
+tmpclaude-*-cwd
+
+# Binary payment file formats (managed via test-data.zip, not Git)
+*.x9
+*.x937
+*.937
+*.icl
+*.iclr
+*.dat

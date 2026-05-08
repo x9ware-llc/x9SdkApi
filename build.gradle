@@ -1,0 +1,33 @@
+//
+// X9SdkApi - Modern Java API surface for the X9Ware SDK
+//
+// A layered facade over x9Sdk with customer-first ergonomic design for 2026.
+// See README.md for the broader design context and the relationship to x9Sdk.
+//
+
+plugins {
+    id 'com.x9ware.conventions' version '1.0.12'
+}
+
+x9Build {
+    projectType = 'library'
+    javaVersion = 8
+    artifactDescription = 'X9Ware SDK API - Modern fluent surface over the X9Ware SDK'
+}
+
+dependencies {
+    // Compatible versions for com.x9ware, com.x9ware.thirdparty, and managed OSS deps
+    // are declared in x9-platform-bom (published from x9Platform). The BOM ref is
+    // hardcoded for now while x9SdkApi is in design-and-discovery mode; once the
+    // project moves into the platform release cycle, this can switch to ${version}
+    // so it tracks this project's version through the Gradle Release Plugin.
+    implementation platform('com.x9ware:x9-platform-bom:5.10.0-SNAPSHOT')
+
+    // Core dependency: the legacy X9Ware SDK that this API wraps. The modern API
+    // is a layered facade; it never reimplements x9Sdk's behaviour, only exposes
+    // it under a customer-first surface.
+    implementation 'com.x9ware:x9sdk'
+
+    // Logging - the SDK uses SLF4J; customers bring their own binding.
+    implementation 'org.slf4j:slf4j-api'
+}
