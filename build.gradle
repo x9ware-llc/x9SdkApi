@@ -6,7 +6,7 @@
 //
 
 plugins {
-    id 'com.x9ware.conventions' version '1.0.12'
+    id 'com.x9ware.conventions' version '1.0.13'
 }
 
 x9Build {
