@@ -12,10 +12,9 @@ These notes record the position reached through discussion of Topic 1 (Spring po
 
 ### Audience and document length
 
-- The primary reader is internal. Calibrate vocabulary to a reader with limited exposure to broader Java community jargon; concrete code carries more weight than abstract terminology. The 4/28 internal email named the modernization themes (interface-based design, JavaBeans, observability hooks, modern threading, Spring-ecosystem compatibility, containerization), so the proposal is not landing cold.
+- The primary reader is internal. Calibrate vocabulary to a reader; concrete code carries more weight than abstract terminology. The 4/28 internal email named the modernization themes (interface-based design, JavaBeans, observability hooks, modern threading, Spring-ecosystem compatibility, containerization), so the proposal is not landing cold.
 - The 4/28 email invited "a better idea entirely" and a later message invited critique of the Engine-based design. Direct critique is welcome; deference is not.
 - Target length: 4–8 pages, ~6 pages preferred. Executive summary up front serves as the under-a-page elevator pitch. Body earns the rest of the length by adding substance the summary cannot carry.
-- Calibrate vocabulary to the reader; explain through before/after code rather than through framework conventions that may not be familiar. Keep "ceremony" — the term has been requested.
 
 ### Spring positioning (Topic 1 outcome)
 
