@@ -1,10 +1,10 @@
-# X9Ware SDK API — Design Vision
+# X9Ware SDK API — Strategy
 
 X9Ware LLC • May 8, 2026
 
 ## Status
 
-**DRAFT — under active design.** This document is a vision, not a charter. It articulates the destination and the principles that lead the design there, and explicitly does not pin specific class signatures, method names, or implementation sequencing.
+**DRAFT — under active design.** This document is a strategy, not a charter. It articulates the destination and the principles that lead the design there, and explicitly does not pin specific class signatures, method names, or implementation sequencing.
 
 ## Working Notes — Synthesis as of May 8, 2026 (NOT part of the final vision; captures discussion state for the upcoming rewrite)
 
