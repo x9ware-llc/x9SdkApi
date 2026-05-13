@@ -133,13 +133,26 @@ The existing charter already states the competitive case well: "The core APIs ne
 The dual-API model becomes two physical Maven artifacts.
 
 - **`x9Sdk`** — the legacy direct-construction surface that eighteen existing customers depend on. Java 8 floor. Framework-neutral, no new open-source dependencies. Continues exactly as it is. The existing design conventions stay intact for the customers who depend on them.
-- **`x9SdkApi`** — the modern API. Java 17 (or 21) floor. Built on Spring Framework as the substrate (decision pending — see *What is not decided here*). New customers and 2026 prospects use this artifact. One coherent design language across every type it exposes.
+- **`x9SdkApi`** — the modern API. JDK floor deliberately deferred (see *JDK floor for x9SdkApi* below). Spring substrate decision pending (see *What is not decided here*). New customers and 2026 prospects use this artifact. One coherent design language across every type it exposes.
 
 `x9SdkApi` depends on `x9Sdk` as a Maven artifact. Customers wanting full direct-construction control just import x9Sdk; customers wanting the modern surface import x9SdkApi (which transitively brings x9Sdk). The escape hatch from x9SdkApi already exists: it is the parent x9Sdk artifact.
 
 **The renamed Engines (`X9ValidateEngine`, `X9ScrubEngine`, `X9CloneEngine`, etc.) live in `x9SdkApi`, not in `x9Sdk`.** They are weeks old, not legacy; the eighteen existing customers use the legacy direct-construction classes (`X9SdkBase`, `X9Writer`, `X9SdkIO`), not Engines. Putting Engines in x9Sdk and recommending customers skip past them sends the wrong message — it makes Engines sound retrofitted or broken. The artifact split lets each surface own its design language coherently. The existing charter for fluent Engines becomes the design baseline for x9SdkApi; the conventions x9Sdk customers depend on stay in x9Sdk.
 
-**Java floor split.** Spring Framework 6.x and Spring Boot 3.x require Java 17. Pinning x9SdkApi to a Java 17 floor (or 21) lets x9SdkApi use modern Spring; existing customers on Java 8 stay on x9Sdk, which keeps its Java 8 floor. The dual-API model already preserves the Java 8 path for customers who need it; x9SdkApi does not have to compromise the modern surface to accommodate them.
+### JDK floor for x9SdkApi
+
+The JDK floor for x9SdkApi is a deliberate decision separate from the Spring substrate decision. The two were initially coupled — Spring Framework 6 and Spring Boot 3 require JDK 17, so adopting Spring inside x9SdkApi forced the floor to 17. If Spring lives in a separate companion artifact, that artifact carries its own floor (Boot 3 → JDK 17, Boot 4 likely → JDK 21) and x9SdkApi's floor does not have to follow.
+
+The candidate floors and what each enables or excludes:
+
+| Floor | What it enables in our own code | Customer segment cost |
+|---|---|---|
+| **Java 1.8** | Matches x9Sdk's floor; every current x9Sdk customer can adopt the modern API surface without changing JDK. `var` still works at the customer call site against Java 8 return types. | No records, sealed types, modules, `java.net.http`, or text blocks in our own implementation. JavaBean conventions and builders carry the result-object design. |
+| **JDK 11** | LTS; `var` in our own code, modules, `java.net.http`; trims the legacy-JVM long tail. | Customers locked to Java 1.8 by vendor-support contracts cannot adopt the modern API surface. |
+| **JDK 17** | Records, sealed types, pattern-matching `instanceof`, text blocks, switch expressions. Aligns with Spring Boot 3 floor when the companion starter is in play, so the starter does not have to ship its own runtime expectation gap. | Excludes both Java 1.8 holdouts and JDK 11 LTS shops. |
+| **JDK 21** | Virtual threads, record patterns, switch patterns. Aligns with the likely Spring Boot 4 floor. | Narrower still; threading is not typically a concern at the SDK API boundary, so most of the win is record/switch ergonomics rather than runtime capability. |
+
+The decision turns on the size and price-sensitivity of the residual Java 1.8 customer segment that would also want the modern API surface — market evidence that lives outside this document. The strategy carries the trade-off explicitly so the choice can be made deliberately and revisited as that segment shrinks and as Spring Boot's own floor moves. The dual-artifact model preserves the Java 8 path through x9Sdk regardless of where x9SdkApi's floor lands; the question this section answers is whether the *modern* surface is reachable from Java 8 or not.
 
 ## What "modern" means in 2026
 
@@ -153,7 +166,11 @@ The "would you write this yourself" test is the design north star. The dimension
 
 **Interface-based public surface.** Engines and the major lifecycle types expose Java interfaces, not just concrete classes, for the public API. Customers using Spring Framework's dependency injection get clean substitution (test doubles, partial mocks); customers using plain `new` construction lose nothing.
 
-**Lifecycle invisible to the customer.** `X9SdkApplication` is the lifecycle root, exposed as a Java interface. In Spring Boot, AutoConfiguration constructs the implementation and wires it as a bean; the customer `@Autowired`s `X9SdkApplication` and uses it as a parameter to Engine factories. In plain Java, a small builder block constructs an implementation once and keeps it for the application's lifetime; it does not appear in per-operation code paths. The customer never *constructs or manages* `X9SdkApplication`; the container or the builder handles both. Customers who need to substitute their own implementation can do so against the interface.
+**Two-layer lifecycle.** `X9SdkApplication` is the customer-visible lifecycle root, exposed as a Java interface. Customers construct it once at application startup — via a builder block in plain Java, or via the starter's `@Bean` in Spring Boot — and release it at application shutdown via try-with-resources or the container's `@PreDestroy`. This is the only layer customers actively manage. The seven-step legacy preamble is absorbed into the builder.
+
+Underneath that customer-visible layer, the SDK manages a second lifecycle layer invisibly. Process-scoped legacy state (`X9SdkRoot.shutdown`, `X9JdkLogger.closeLog`, and related global cleanup) is registered at the first `X9SdkApplication` construction in the JVM as a shutdown hook. The hook is idempotent and self-deregistering. Customers do not opt in to it and do not see it. This separation makes the SDK defensive against client error — legacy state is cleaned up even if the customer forgets try-with-resources — and correct across multi-context scenarios where multiple `X9SdkApplication` instances are created and destroyed during a JVM's lifetime (test scenarios, container scenarios). Each instance manages its own per-application state through its `close()`; the shared JVM-global cleanup happens once on JVM exit.
+
+Per-engine lifecycle is implicit in `.run()` — the Engine's resources are acquired and released within the fluent chain's terminal verb. For the rare power-user case of long-lived readers yielding records lazily, or writers holding file handles across multiple `addItem` calls, the Engine is `AutoCloseable` and may be wrapped in try-with-resources by the customer. The default case never sees this.
 
 **Observability seams.** SLF4J for logs (already in place across x9Sdk runtime). Micrometer interfaces for metrics (the customer's existing meter registry is honored). OpenTelemetry-compatible spans on long-running operations. The customer's observability stack — Prometheus, Datadog, New Relic, anything else — works without us picking the backend.
 
@@ -234,7 +251,7 @@ This is a vision, not a charter. Specific decisions deferred to sibling charters
 
 - Whether x9SdkApi commits to Spring Framework as the substrate (recommendation: yes; final decision deferred)
 - Whether x9SdkApi ships an AutoConfiguration companion artifact alongside the core (recommendation: yes after the core stabilizes; deferred for now)
-- Java 17 vs Java 21 floor for x9SdkApi (Java 17 covers Spring 6.x; Java 21 unlocks virtual threads natively without back-port)
+- JDK floor for x9SdkApi (Java 1.8 / JDK 11 / 17 / 21 — trade-off documented in *JDK floor for x9SdkApi*; turns on the size of the residual Java 1.8 segment that would want the modern API surface)
 - Per-Engine builder method names beyond the charter's universal verbs (those remain the per-Engine charters' responsibility)
 - The exact source-abstraction interface (a sibling charter for source/sink handling follows from this vision)
 - The exact lifecycle abstraction for non-Spring deployments (a sibling charter for lifecycle follows from this vision)
@@ -259,19 +276,146 @@ The vision is expected to be stable for the modernization rollout. Specific sign
 - A competitor ships a check-processing SDK that materially redefines what "looking better in 2026" means and the vision's design language no longer matches.
 - AI tooling changes the bar for "would you write this yourself" — the destination has to keep moving.
 
-## Appendix — Five forms of X9VerifyX9
+## Appendix — Forms of X9VerifyX9
 
-This appendix shows the same operation — open an X9.37 file, validate it, modify two records, and write a new output — in five forms. The contrast is the point.
+This appendix shows the same operation — open an X9.37 file, validate it, modify two records, and write a new output — in two live forms plus an archive of three additional forms considered during the design process.
 
-The five forms in order:
+The two live forms are the canonical surfaces the strategy commits to:
 
-1. **Legacy / existing** — current `X9VerifyX9.java` from x9SdkExamples
-2. **Fluent (exactly per charter)** — what the charter alone delivers, no Spring
-3. **Fluent (charter + x9SdkApi design language)** — same Engine grammar, refined to the design language this vision adds
-4. **Modern Spring** — design-language fluent surface plus Spring AutoConfiguration
-5. **Facade-shaped** — an earlier modernization sketch where Engines were fully abstracted; included for completeness as the opposite extreme of form 1
+1. **Fluent (canonical)** — the x9SdkApi Engine pipeline in plain Java. Customer constructs `X9SdkApplication` explicitly via builder, uses Engines, releases via try-with-resources. No Spring dependency.
+2. **Modern Spring (Form 1 + starter)** — the same Engine pipeline consumed through the `x9-sdk-spring-boot-starter` companion artifact. Starter provides `X9SdkApplication` as a Spring-managed `@Bean`; the container handles construction and `@PreDestroy`. Operation code is identical to Form 1.
 
-### 1. Legacy / existing
+The archive at the end of the appendix preserves three additional forms considered during the design process: the current legacy `X9VerifyX9.java`, an earlier "exactly per charter" form before the design-language refinements were folded in, and a facade-shaped variant that was rejected as too aggressive an abstraction over the Engine layer. These are kept for reference, not as live alternatives.
+
+### 1. Fluent (canonical)
+
+The canonical x9SdkApi Engine pipeline in plain Java. `X9SdkApplication` is typed as the public interface; `var` hides dialect-concrete locals so the customer never types `X9ValidateEngine937`; `Path` is the source type (cloud-friendly, `Resource`-compatible); the Engine chain runs inline as a fluent expression. The customer constructs `X9SdkApplication` in a builder block and releases it via try-with-resources — the explicit per-application lifecycle, which is the project's default for standalone Java. JVM-global legacy cleanup happens automatically via the shutdown-hook layer described in *Two-layer lifecycle*; the customer never sees it.
+
+```java
+package com.x9ware.examples;
+
+import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+
+import com.x9ware.application.X9SdkApplication;
+import com.x9ware.engines.X9ModifyEngine;
+import com.x9ware.engines.X9ValidateEngine;
+import com.x9ware.logging.X9LoggerFactory;
+
+public final class X9VerifyX9 {
+
+    private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
+
+    private X9VerifyX9() {
+    }
+
+    public static void main(final String[] args) {
+        if (args.length != 3) {
+            LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
+            System.exit(1);
+        }
+        final String licenseKey = args[0];
+        final Path inputPath = Path.of(args[1]);
+        final Path outputPath = Path.of(args[2]);
+
+        try (var app = X9SdkApplication.builder()
+                .applicationName("X9VerifyX9")
+                .licenseKey(licenseKey)
+                .build()) {
+
+            final var result = X9ValidateEngine.x937(app)
+                    .fromPath(inputPath)
+                    .validateTiffImages(true)
+                    .run();
+            LOGGER.info("validation: errorCount={} severity={}",
+                    result.getErrorCount(), result.getSeverity());
+
+            final var itemIndex = new AtomicInteger(0);
+            final var modifySummary = X9ModifyEngine.x937(app)
+                    .fromPath(inputPath)
+                    .toPath(outputPath)
+                    .transform(item -> {
+                        int index = itemIndex.getAndIncrement();
+                        if (index == 0) {
+                            item.setAmount(new BigDecimal("88.88"));
+                            return item;
+                        }
+                        if (index == 1) {
+                            return null;
+                        }
+                        return item;
+                    })
+                    .run();
+            LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
+        }
+    }
+}
+```
+
+### 2. Modern Spring (Form 1 + starter)
+
+Form 1 consumed through the `x9-sdk-spring-boot-starter` companion artifact. The starter contributes an `@Bean X9SdkApplication` built from `@ConfigurationProperties`, so the customer's Spring Boot application gets an autowired application root without constructing it. The container manages the per-application lifecycle — `@PreDestroy` runs `X9SdkApplication.close()` at shutdown, releasing per-application state. The JVM shutdown hook still handles process-scoped legacy cleanup as in Form 1; that layer is unchanged. What changes from Form 1 is the scaffolding around the operation: `main()` is Spring Boot's, configuration is externalized to `application.yml`, the builder block is absorbed into the starter, and the operation becomes a `@Service` method callable from anywhere in the Spring Boot component graph. The Engine pipeline itself is byte-for-byte identical to Form 1's.
+
+```java
+package com.x9ware.examples;
+
+import java.math.BigDecimal;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.x9ware.application.X9SdkApplication;
+import com.x9ware.engines.X9ModifyEngine;
+import com.x9ware.engines.X9ValidateEngine;
+
+@Service
+public final class X9VerifyX9 {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(X9VerifyX9.class);
+
+    @Autowired X9SdkApplication x9;
+
+    public void verify(final Path inputPath, final Path outputPath) {
+        final var result = X9ValidateEngine.x937(x9)
+                .fromPath(inputPath)
+                .validateTiffImages(true)
+                .run();
+        LOGGER.info("validation: errorCount={} severity={}",
+                result.getErrorCount(), result.getSeverity());
+
+        final var itemIndex = new AtomicInteger(0);
+        final var modifySummary = X9ModifyEngine.x937(x9)
+                .fromPath(inputPath)
+                .toPath(outputPath)
+                .transform(item -> {
+                    int index = itemIndex.getAndIncrement();
+                    if (index == 0) {
+                        item.setAmount(new BigDecimal("88.88"));
+                        return item;
+                    }
+                    if (index == 1) {
+                        return null;
+                    }
+                    return item;
+                })
+                .run();
+        LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
+    }
+}
+```
+
+### Archive
+
+Forms below were considered during the design process and are preserved for reference. They are not live alternatives to Forms 1 and 2 above. The legacy form is the current `X9VerifyX9.java` shown for before/after contrast. The exactly-per-charter form is an earlier rendering of Form 1 before the design-language refinements (`X9SdkApplication` as interface, `var`, `Path`, inline pipeline composition) were folded in. The facade-shaped form was rejected as too aggressive an abstraction over the Engine layer — it loses Engine discoverability and pipeline composability without commensurate ergonomic gain.
+
+#### Legacy / existing
 
 The current `X9VerifyX9.java` from `x9SdkExamples`. Seven-step preamble, manual heap walks via `X9ObjectManager.getFirst()/getNext()`, manual byte-array record mutation via type wrappers, manual trailer recomputation, manual stream-to-file copy. 760 lines.
 
@@ -1038,7 +1182,7 @@ public final class X9VerifyX9 {
 }
 ```
 
-### 2. Fluent (exactly per charter)
+#### Fluent (exactly per charter)
 
 Charter conventions strictly applied: dialect-concrete return types from static factories, `fromFile(File)` source, single terminal verb `run`, builder block constructing `X9SdkApplication` as `AutoCloseable`. No Spring. Validate and modify expressed as separate Engine pipelines composed in customer code.
 
@@ -1112,131 +1256,7 @@ public final class X9VerifyX9 {
 }
 ```
 
-### 3. Fluent (charter + x9SdkApi design language)
-
-Same Engine grammar and same business logic as form 2, refined by the design moves this vision adds: `X9SdkApplication` typed as the public interface; `var` hides dialect-concrete locals (the customer never types `X9ValidateEngine937`); `Path` source instead of `File` (cloud-friendly, `Resource`-compatible); the Engine chain runs inline (no separate `validator` / `modifier` capture, since the dialect concrete never needs to appear in a customer-typed local). Still no Spring — the customer constructs the application in a small builder block.
-
-```java
-package com.x9ware.examples;
-
-import java.math.BigDecimal;
-import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.slf4j.Logger;
-
-import com.x9ware.application.X9SdkApplication;
-import com.x9ware.engines.X9ModifyEngine;
-import com.x9ware.engines.X9ValidateEngine;
-import com.x9ware.logging.X9LoggerFactory;
-
-public final class X9VerifyX9 {
-
-    private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
-
-    private X9VerifyX9() {
-    }
-
-    public static void main(final String[] args) {
-        if (args.length != 3) {
-            LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
-            System.exit(1);
-        }
-        final String licenseKey = args[0];
-        final Path inputPath = Path.of(args[1]);
-        final Path outputPath = Path.of(args[2]);
-
-        try (var app = X9SdkApplication.builder()
-                .applicationName("X9VerifyX9")
-                .licenseKey(licenseKey)
-                .build()) {
-
-            final var result = X9ValidateEngine.x937(app)
-                    .fromPath(inputPath)
-                    .validateTiffImages(true)
-                    .run();
-            LOGGER.info("validation: errorCount={} severity={}",
-                    result.getErrorCount(), result.getSeverity());
-
-            final var itemIndex = new AtomicInteger(0);
-            final var modifySummary = X9ModifyEngine.x937(app)
-                    .fromPath(inputPath)
-                    .toPath(outputPath)
-                    .transform(item -> {
-                        int index = itemIndex.getAndIncrement();
-                        if (index == 0) {
-                            item.setAmount(new BigDecimal("88.88"));
-                            return item;
-                        }
-                        if (index == 1) {
-                            return null;
-                        }
-                        return item;
-                    })
-                    .run();
-            LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
-        }
-    }
-}
-```
-
-### 4. Modern Spring
-
-Form 3 with the same business logic, but Spring AutoConfiguration takes over the parts of the program that are no longer the customer's concern: the `main()` driver (Spring Boot starts the application), the argument-parsing block (configuration is externalized to `application.yml` properties or method parameters), the `X9SdkApplication.builder()` setup (AutoConfiguration constructs and wires the implementation), and the `try-with-resources` lifecycle (the container's `@PreDestroy` and shutdown hooks close the application). What remains is the actual operation: a `@Service` method callable from anywhere in the Spring Boot component graph.
-
-```java
-package com.x9ware.examples;
-
-import java.math.BigDecimal;
-import java.nio.file.Path;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import com.x9ware.application.X9SdkApplication;
-import com.x9ware.engines.X9ModifyEngine;
-import com.x9ware.engines.X9ValidateEngine;
-
-@Service
-public final class X9VerifyX9 {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(X9VerifyX9.class);
-
-    @Autowired X9SdkApplication x9;
-
-    public void verify(final Path inputPath, final Path outputPath) {
-        final var result = X9ValidateEngine.x937(x9)
-                .fromPath(inputPath)
-                .validateTiffImages(true)
-                .run();
-        LOGGER.info("validation: errorCount={} severity={}",
-                result.getErrorCount(), result.getSeverity());
-
-        final var itemIndex = new AtomicInteger(0);
-        final var modifySummary = X9ModifyEngine.x937(x9)
-                .fromPath(inputPath)
-                .toPath(outputPath)
-                .transform(item -> {
-                    int index = itemIndex.getAndIncrement();
-                    if (index == 0) {
-                        item.setAmount(new BigDecimal("88.88"));
-                        return item;
-                    }
-                    if (index == 1) {
-                        return null;
-                    }
-                    return item;
-                })
-                .run();
-        LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
-    }
-}
-```
-
-### 5. Facade-shaped (for completeness)
+#### Facade-shaped
 
 An earlier modernization sketch where Engines are fully abstracted behind the facade. The customer reads a `X9File937` from the `X9Context` and operates on it directly via methods like `.validate(...)` and `.write(...)`. Compact in trivial cases, but loses Engine discoverability and pipeline composability — the design opposite extreme of form 1, included so the journey is visible.
 
