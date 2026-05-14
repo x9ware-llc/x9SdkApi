@@ -181,7 +181,7 @@ The strategy is expected to be stable for the modernization rollout. Specific si
 - A competitor ships a check-processing SDK that materially redefines what "looking better in 2026" means and the strategy's design language no longer matches.
 - AI tooling changes the bar for "would you write this yourself" — the destination has to keep moving.
 
-## Appendix — Examples of X9VerifyX9
+## Appendix — Code Examples
 
 This appendix shows the same operation — open an X9.37 file, validate it, modify two records, and write a new output — in three customer-facing examples that illustrate progressive integration shapes a customer might adopt:
 
