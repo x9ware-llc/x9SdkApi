@@ -4,21 +4,21 @@ X9Ware LLC • May 8, 2026
 
 ## Status
 
-**DRAFT — under active development.** This strategy describes the destination for a modern X9Ware SDK API surface, the structural decisions that shape the work, and the principles that guide subsequent design. Specific class signatures, method names, and implementation sequencing are out of scope and belong to the design documents that follow.
+**DRAFT — under active development.** This strategy describes a modern X9Ware SDK API surface, the structural decisions that shape the work, and the principles that guide subsequent design. Specific class signatures, method names, and implementation sequencing are out of scope and belong to the design documents that follow.
 
 ## Vision
 
 A modern Java API in 2026 is more than a fluent grammar. It is a coherent surface that reads as something an enterprise developer would have built themselves if given the year and the resources — interface-based, source-flexible, observability-ready, lifecycle-invisible, framework-friendly, container-deployable, and well-organized around customer mental models. Several pillars combine to produce that experience; no single one is sufficient on its own.
 
-X9Ware's competitive advantage in 2026 lives in the destination, not in shipping velocity. AI tooling has flattened how quickly any team can produce incremental features; differentiation now comes from where you choose to head. This strategy names the destination and the structure for delivering it.
+X9Ware's competitive advantage in 2026 lives in what we ship, not how fast we ship it. AI tooling has flattened the speed at which any team can produce incremental features; differentiation now comes from the choices we make about what we build. This strategy describes the shape of a modern X9Ware SDK API and the structure for delivering it.
 
 ## Executive summary
 
-X9Ware should publish a second, modern Java API alongside the existing SDK. The legacy `x9Sdk` continues unchanged for the eighteen customers built on it. A new artifact, `x9SdkApi`, becomes the surface 2026 enterprise prospects evaluate when comparing X9Ware against commercial and open-source alternatives.
+X9Ware should add a modern Java API to the existing SDK. The legacy `x9Sdk` direct-construction surface continues unchanged for the eighteen customers built on it; the modern API surface lands in the same `x9Sdk` artifact and becomes what 2026 enterprise prospects evaluate when comparing X9Ware against commercial and open-source alternatives.
 
-The strategic case is **customer acquisition**. In 2026, Spring ecosystem compatibility is table stakes for enterprise Java; roughly nine of ten Fortune 500 companies use Java with Spring Boot as the primary backend choice. AI-armed competitors can match incremental moves quickly, which means differentiation must live in the *destination*, not the velocity. The test for the destination: "would a developer evaluating this say *yes, this is what I would build myself*."
+The strategic case is **customer acquisition**. In 2026, Spring ecosystem compatibility is table stakes for enterprise Java; roughly nine of ten Fortune 500 companies use Java with Spring Boot as the primary backend choice. AI-armed competitors can match incremental moves quickly, which means differentiation must live in *what we ship*, not how fast we ship it. The test: "would a developer evaluating this say *yes, this is what I would build myself*."
 
-`x9SdkApi` delivers that destination. Engines and the `X9SdkApplication` lifecycle root become the customer-facing surface, shaped by the design language modern Java APIs follow: Engine-centric (the Engine is the noun, source is configuration), source-agnostic (file, stream, programmatic items uniformly), interface-based, JavaBean-conventional, observability-ready, container-friendly, virtual-thread-compatible. The same operation runs in 61 lines of plain Java, or 49 lines as a Spring Boot `@Service` consumed through the starter — down from 760 lines in the legacy direct-construction style today. The verbose setup block every example opens with today — license registration, configuration loading, dialect binding, and SDK options — collapses to a small builder block in plain Java and to zero customer code in Spring Boot.
+The modern API surface aims for that result. Engines (verb-shaped operations like `X9ValidateEngine`, `X9WriteEngine`) and the `X9SdkApplication` lifecycle root become the customer-facing surface, shaped by the design language modern Java APIs follow: Engine-centric, source-agnostic (file, stream, programmatic items uniformly), interface-based, JavaBean-conventional, observability-ready, Spring-friendly, container-friendly. The same operation runs in 61 lines of plain Java, or 49 lines as a Spring Boot `@Service` consumed through the starter — down from 760 lines in the legacy direct-construction style today. The verbose setup block every example opens with today — license registration, configuration loading, dialect binding, and SDK options — collapses to a small builder block in plain Java and to zero customer code in Spring Boot.
 
 This is "think big, deliver big" applied to the SDK API.
 
@@ -26,26 +26,24 @@ This is "think big, deliver big" applied to the SDK API.
 
 Four operating principles shape the strategy.
 
-**Think big, deliver big.** The destination has to be worth aiming for. Incremental polish on the existing SDK is not the destination; an API that 2026 enterprise developers want to use is.
+**Think big, deliver big.** What we build has to be worth aiming for. Incremental polish on the existing SDK is not enough; the goal is an API that 2026 enterprise developers actively want to use.
 
-**Differentiation lives in the destination, not the velocity.** AI lets X9Ware build anything we can dream of — and it lets competitors do the same. The advantage is no longer in shipping faster; it is in shipping a destination materially better than what an open-source integration framework or a commercial check-processing SDK ships. The bar is high because the competition's bar is rising too.
+**Differentiation lives in what we ship, not how fast.** AI lets X9Ware build anything we can dream of — and it lets competitors do the same. The advantage is no longer in shipping faster; it is in shipping something materially better than what an open-source integration framework or a commercial check-processing SDK ships. The bar is high because the competition's bar is rising too.
 
-**The acquisition lens.** The eighteen current x9Sdk customers came in over the past decade and use the legacy direct-construction surface. Their tech stacks reflect that era. They are not the audience for `x9SdkApi`; they continue with x9Sdk unchanged. The audience for `x9SdkApi` is the new prospect a sales conversation surfaces tomorrow — predominantly Cloud, Spring Boot, container-deployed, modernization-aware. That prospect evaluates the SDK by feel before they ever ship a line of integration code; the API has to read as something they would have built themselves if they had a year to do it right.
+**The acquisition lens.** The eighteen current x9Sdk customers came in over the past decade and use the legacy direct-construction surface. Their tech stacks reflect that era; they are not the prospects this strategy targets. The audience the modern API surface aims at is the new prospect a sales conversation surfaces tomorrow — predominantly Cloud, Spring Boot, container-deployed, modernization-aware. That prospect evaluates the SDK by feel before they ever ship a line of integration code; the API has to read as something they would have built themselves.
 
-**Spring ecosystem compatibility is table stakes in 2026.** Approximately 55–60% of enterprise Java workloads run on Spring Boot, and ~92% of enterprise backend Java job postings reference Spring. Quarkus and Micronaut exist but are bounded — their differentiators (cold-start time, memory footprint) do not apply to file-processing workloads. For X9Ware's market, choosing Spring as the substrate is a low-risk decision with high upside.
+**Spring ecosystem compatibility is table stakes in 2026.** Spring Boot remains the dominant backend framework for enterprise Java development, powering approximately 60% of enterprise backends, and nearly 92% of Fortune 100 companies still rely on the Java ecosystem for mission-critical operations. Quarkus and Micronaut exist but are bounded — their differentiators (cold-start time, memory footprint) do not apply to file-processing workloads. For X9Ware's market, supporting Spring through an opt-in companion artifact is a low-risk decision with high upside.
 
 ## The proposal — modern API delivered in x9Sdk
 
-The customer-facing end state is a single Maven artifact:
+The customer-facing end state is a single SDK distribution:
 
-- **`x9Sdk`** carries both the **legacy direct-construction surface** that the eighteen existing customers depend on and the **modern API surface** (Engines, `X9SdkApplication`, fluent grammar, interface-based types, observability seams). Java 1.8 floor. The two surfaces coexist within one artifact, in the spirit of the IBM-CICS dual-API model that kept macro-level and command-level APIs together in one product. Customers choose whichever surface fits their integration, and the legacy surface continues exactly as it is for the customers depending on it.
-- An optional **Spring Boot starter** (`x9-sdk-spring-boot-starter`) ships separately as the only other artifact, providing zero-ceremony Spring integration for customers who want it. The starter depends on x9Sdk; it is not required for the modern API surface itself.
+- **`x9Sdk`** carries both the **legacy direct-construction surface** that the eighteen existing customers depend on and the **modern API surface** (Engines, `X9SdkApplication`, fluent grammar, interface-based types, observability seams). Java 1.8 floor. The two surfaces coexist within one SDK, in the spirit of the IBM-CICS dual-API model that kept macro-level and command-level APIs together in one product. Customers choose whichever surface fits their integration, and the legacy surface continues exactly as it is for the customers depending on it.
+- An optional **Spring Boot starter** (`x9-sdk-spring-boot-starter`) ships separately as a companion library, providing zero-ceremony Spring integration for customers who want it. The starter depends on x9Sdk; it is not required for the modern API surface itself.
 
-**Development happens in `x9SdkApi` as a temporary isolation artifact.** During the development phase, the modern API surface is built in a separate `x9SdkApi` repository so the experimental work does not touch x9Sdk's production codebase. Before the first customer release of the modern API surface, `x9SdkApi`'s content is merged into `x9Sdk` with git history preserved. Customers never see `x9SdkApi` as a Maven artifact — it is purely internal scaffolding. The merge procedure is documented in the runbook referenced under *Path forward*.
+**Development happens in a temporary `x9SdkApi` repository.** During the development phase, the modern API surface is built in a separate `x9SdkApi` repository so the experimental work does not touch x9Sdk's production codebase. Before the first customer release of the modern API surface, `x9SdkApi`'s content is merged into `x9Sdk` with git history preserved. Customers never see `x9SdkApi` as a separate library — it is purely internal scaffolding. The merge procedure is documented in the runbook referenced under *Path forward*.
 
-**The Engines (`X9ValidateEngine`, `X9ScrubEngine`, `X9CloneEngine`, etc.) are part of the modern API surface** that lands in `x9Sdk` via the merge. The eighteen existing x9Sdk customers can use Engines without subscribing fully to the modern style, and X9Ware's own apps (x9Assist, x9Utilities) get the same access. The `engine.legacy()` accessor concept is unnecessary in the merged single-artifact end state: a customer reaching below the modern surface uses the legacy direct-construction classes (`X9SdkBase`, `X9Writer`, `X9SdkIO`) that already live in the same artifact, so there is no within-artifact "legacy" boundary to bridge.
-
-**Packaging within the merged x9Sdk uses a flat package tree.** Modern API classes and existing classes coexist in functional packages; there is no top-level `com.x9ware.api.*` namespace separating modern from legacy. The modern API surface is identified by documentation, the User Guide, and example programs, not by package-naming convention. A `com.x9ware.internal.*` namespace was rejected because moving existing classes into it would break the eighteen existing customers' imports.
+**Packaging within x9Sdk uses a flat package tree.** Modern API classes and existing classes coexist in functional packages; there is no top-level `com.x9ware.api.*` namespace separating modern from legacy. The modern API surface is identified by documentation, the User Guide, and example programs, not by package-naming convention. A `com.x9ware.internal.*` namespace was rejected because moving existing classes into it would break the eighteen existing customers' imports.
 
 ### JDK floor for the modern API surface
 
@@ -59,6 +57,7 @@ Candidates considered:
 | **JDK 11** | `var`, modules, `java.net.http`, text blocks (JDK 13 backport varies) | Java 1.8 holdouts on long-term-support contracts |
 | **JDK 17** | Records, sealed types, pattern-matching `instanceof`, text blocks, switch expressions; aligns with Spring Boot 3 starter floor | Java 1.8 + JDK 11 LTS shops |
 | **JDK 21** | Virtual threads, record patterns, switch patterns; aligns with likely Spring Boot 4 floor | Narrower still; threading is not typically a concern at the SDK API boundary |
+| **JDK 25** | Latest LTS; signals "modern" by being current; adds scoped values, stream gatherers, further pattern-matching refinements | Narrowest segment; meaningful adoption pace lags LTS by 12–24 months |
 
 Customer call-site features — `var`, pattern-matching `instanceof`, switch expressions, text blocks in their own code, virtual threads in their own runtime — work at any JDK the customer chooses, regardless of our compiled floor. The features that require *us* to upgrade are the ones we ship in our public surface.
 
@@ -67,15 +66,19 @@ Customer call-site features — `var`, pattern-matching `instanceof`, switch exp
 - **Sealed result hierarchies with exhaustive `switch`** (JDK 17). An interface plus package-private constructors approximates the closed-subtype invariant; nothing approximates the compile-time exhaustiveness check at the customer call site. Validation outcomes (`Clean | Warnings | Errors`) stay JavaBean-shaped with an `if (result.getSeverity().isError())` idiom rather than an exhaustive switch.
 - **Module-enforced public API boundary** (JDK 9+). The convention-based "internal" marker (package naming, `@apiNote`, Javadoc warnings) remains the only mechanism keeping customers out of implementation types. JPMS would enforce the boundary at compile time so a customer reaching for an internal class would get a compile error rather than a runtime surprise.
 
-Records-as-return-types can be approximated with verbose final classes (or Lombok); the customer-side difference is destructuring syntax in `switch`, which the JavaBean idiom approximates with `instanceof` + getter chains.
+Records-as-return-types can be approximated with verbose final classes; the customer-side difference is destructuring syntax in `switch`, which the JavaBean idiom approximates with `instanceof` + getter chains. Virtual threads (JDK 21+) similarly stay out of our internal implementation; customer applications running on a JDK 21+ runtime get the benefit of virtual threads regardless of our compile target.
 
 This decision is revisitable as the Java 1.8 customer segment shrinks. JDK 17 floor + JPMS modules + sealed result types is a coherent forward-looking package — recorded here so the option is preserved rather than rediscovered.
 
-## Pillars of a modern SDK API
+## Pillars of a modern X9Ware SDK API
 
-The "would you write this yourself" test is the design north star. The pillars below name what that test actually requires of an SDK in 2026. Each is a foundation the surface rests on; together they produce the coherent experience a 2026 enterprise prospect expects. Each pillar is independently meaningful but does not deliver the destination on its own — the strength of the API comes from their alignment.
+The "would you write this yourself" test is the design north star. The pillars below name what that test actually requires of an SDK in 2026. Each is a foundation the surface rests on; together they produce the coherent experience a 2026 enterprise prospect expects. Each pillar is independently meaningful but does not carry the API on its own — the strength comes from their alignment.
 
-**Engine-centric Fluent API.** The Engine is the noun. The customer's first interaction is with an Engine — `X9ValidateEngine`, `X9WriteEngine`, `X9ReadEngine` — not with a file, a facade method, or a utility-shaped wrapper. Source (file, stream, programmatic items) is configuration on the Engine; the Engine's lifecycle is build → configure → run; the result is a typed summary the customer reads. The fluent grammar makes the chain read as a single intentional act rather than as a sequence of imperative steps. The detailed design of the Engine factory pattern, terminal verb, source/sink builder methods, and conventions every Engine follows lives in the fluent API design referenced under *Related documents*.
+**Ease of use.** The customer should reach the result quickly, with minimal ceremony and minimal boilerplate the SDK can manage internally. Three design moves carry this pillar:
+
+- **Engine-centric fluent API.** The customer's first interaction is with an Engine — `X9ValidateEngine`, `X9WriteEngine`, `X9ReadEngine` — not with a file, a facade method, or a utility-shaped wrapper. Source (file, stream, programmatic items) is configuration on the Engine; the Engine's lifecycle is build → configure → run; the result is a typed summary. The fluent grammar makes the chain read as a single intentional act rather than as a sequence of imperative steps. The detailed design of the Engine factory pattern, terminal verb, source/sink builder methods, and conventions every Engine follows lives in the fluent API design referenced under *Related documents*.
+- **Spring Boot zero-ceremony onboarding.** A customer using the optional `x9-sdk-spring-boot-starter` gets `X9SdkApplication` autowired and lifecycle managed through `@PreDestroy` — no builder block, no try-with-resources, no explicit shutdown. The Engine pipeline that runs in 61 lines of plain Java collapses to roughly 49 lines as a Spring Boot `@Service`.
+- **Verbose setup absorbed by the SDK.** Boilerplate that today opens every example — license registration, configuration loading, dialect binding, SDK options — is internalized in the builder (or the starter), out of customer code.
 
 **Source-agnostic by construction.** The API supports any source uniformly: `Path`, `InputStream`, Spring `Resource`, programmatic items. No type in the public surface forces customers through `java.io.File`. The current `X9File` extends `java.io.File` and encodes that constraint into the type system; modern x9SdkApi cannot. Cloud storage, Resource abstractions, and stream-only inputs all become first-class without API duplication.
 
@@ -179,7 +182,7 @@ The strategy is expected to be stable for the modernization rollout. Specific si
 - A paying customer surfaces with conflicting needs that x9Sdk cannot serve and x9SdkApi cannot serve in its proposed form.
 - The Spring ecosystem shifts materially (Spring Framework 7, Spring Boot 4) in ways that change the substrate decision.
 - A competitor ships a check-processing SDK that materially redefines what "looking better in 2026" means and the strategy's design language no longer matches.
-- AI tooling changes the bar for "would you write this yourself" — the destination has to keep moving.
+- AI tooling changes the bar for "would you write this yourself" — what counts as "modern" has to keep moving.
 
 ## Appendix — Code Examples
 
