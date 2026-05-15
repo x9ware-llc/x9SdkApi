@@ -72,7 +72,7 @@ This decision is revisitable as the Java 1.8 customer segment shrinks. JDK 17 fl
 
 ## Pillars of a modern X9Ware SDK API
 
-The "would you write this yourself" test is the design north star. The pillars below name what that test actually requires of an SDK in 2026. Each is a foundation the surface rests on; together they produce the coherent experience a 2026 enterprise prospect expects. Each pillar is independently meaningful but does not carry the API on its own — the strength comes from their alignment.
+Our north star is the "would you write this yourself" test. The pillars below name what passing that test actually requires of an SDK in 2026. Each is a foundation the surface rests on; together they produce the coherent experience a 2026 enterprise prospect expects. Each pillar is independently meaningful but does not carry the API on its own — the strength comes from their alignment.
 
 **Ease of use.** The customer should reach the result quickly, with minimal ceremony and minimal boilerplate the SDK can manage internally. Three design moves carry this pillar:
 
