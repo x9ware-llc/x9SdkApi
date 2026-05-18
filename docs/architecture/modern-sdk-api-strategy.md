@@ -72,7 +72,7 @@ This decision is revisitable as the Java 1.8 customer segment shrinks. JDK 17 fl
 
 ## Pillars of a modern X9Ware SDK API
 
-Our north star is the "would you write this yourself" test. The pillars below name what passing that test actually requires of a modern SDK. Each is a foundation the surface rests on; together they produce the coherent experience a prospect expects. Each pillar is independently meaningful but does not carry the API on its own — the strength comes from their alignment.
+The pillars below describe the design choices that shape the modern API surface — what a developer encounters and what makes the experience cohere. Each pillar is independently meaningful; the modern character of the API comes from their alignment.
 
 **Ease of use.** The customer should reach the result quickly, with minimal ceremony and minimal boilerplate the SDK can manage internally. Three design moves carry this pillar:
 
