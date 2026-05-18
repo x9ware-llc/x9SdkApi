@@ -178,8 +178,8 @@ The pilot Engine is the empirical test. If the design language proves brittle in
 The strategy is expected to be stable for the modernization rollout. Specific signals that warrant revision:
 
 - A paying customer surfaces with conflicting needs that x9Sdk cannot serve and x9SdkApi cannot serve in its proposed form.
-- The Spring ecosystem shifts materially (Spring Framework 7, Spring Boot 4) in ways that change the substrate decision.
-- A competitor ships a check-processing SDK that materially redefines what "looking better in 2026" means and the strategy's design language no longer matches.
+- The Spring ecosystem shifts materially (Spring Framework 7, Spring Boot 4) in ways that change the foundation decision.
+- A competitor ships a payment file-processing SDK that materially redefines what "looking better" means and the strategy's design language no longer matches.
 - AI tooling changes the bar for "would you write this yourself" — what counts as "modern" has to keep moving.
 
 ## Appendix — Code Examples
