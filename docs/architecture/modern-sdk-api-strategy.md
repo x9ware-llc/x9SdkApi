@@ -122,7 +122,7 @@ The pillars above are what the modern API surface delivers. The Engine design al
 
 A future direction the modern API surface accommodates is chaining these operators into reusable workflows for complex payment-file operations: file consolidation across distributed capture points, multi-stage processing pipelines, dialect-conversion flows. X9Collector is a concrete candidate — its file-consolidation workflow is a natural composition of Engine operators.
 
-The connective tissue between operators — the streaming protocol, backpressure handling, error semantics, resource lifecycle across stages, workflow runtime — is genuinely complex and is not specified by this strategy. The foundation today supports independent Engine reuse via dependency injection, as Example 3 in the Appendix illustrates. When and whether to extend the Engine design with a workflow primitive is a subsequent design and implementation decision; the Engine shape does not foreclose that direction.
+The connective tissue between operators — the streaming protocol, backpressure handling, error semantics, resource lifecycle across stages, workflow runtime — is genuinely complex and is not specified by this strategy. The foundation today supports independent Engine reuse via dependency injection. When and whether to extend the Engine design with a workflow primitive is a subsequent design and implementation decision; the Engine shape does not foreclose that direction.
 
 ## A worked example
 
@@ -191,11 +191,10 @@ The strategy is expected to be stable for the modernization rollout. Specific si
 
 ## Appendix — Code Examples
 
-This appendix shows the same operation — open an X9.37 file, validate it, modify two records, and write a new output — in three customer-facing examples that illustrate progressive integration shapes a customer might adopt:
+This appendix shows the same operation — open an X9.37 file, validate it, modify two records, and write a new output — in two customer-facing examples that illustrate the integration shapes a customer might adopt:
 
 1. **Plain Java** — the Engine pipeline in plain Java. Customer constructs `X9SdkApplication` explicitly via builder, uses Engines, releases via try-with-resources. No Spring dependency.
 2. **Spring Boot via the starter** — the same Engine pipeline consumed through the `x9-sdk-spring-boot-starter` companion artifact. Starter provides `X9SdkApplication` as a Spring-managed `@Bean`; Spring Boot handles construction and `@PreDestroy`. Operation code is identical to Example 1.
-3. **Spring-based Engine reuse** — Engines defined as reusable `@Bean` definitions, composed via dependency injection in a workflow service. Illustrates the foundation the *Looking ahead* note describes: today, Spring DI gives customers reusable Engine instances; in the future, a workflow primitive could chain those Engines as operators.
 
 ### Example 1 — Plain Java
 
@@ -317,83 +316,6 @@ public final class X9VerifyX9 {
                 })
                 .run();
         LOGGER.info("modify: modifiedCount={}", modifySummary.getModifiedCount());
-    }
-}
-```
-
-### Example 3 — Spring-based Engine reuse
-
-Engine definitions become reusable Spring beans, configured once and injected into multiple workflow services. The same `imageValidator` bean can serve daily settlement, exception processing, audit workflows — wherever image validation is needed. The service composes Engines explicitly in plain Java: it calls each Engine, handles its result, and decides what to do next.
-
-This example demonstrates what Spring DI delivers today: **reusable Engine instances, not pipeline composability.** There is no common operator interface, no streaming protocol between Engines, no built-in backpressure or shared exception model. The service writes the orchestration logic explicitly. The Engine design supports a future workflow primitive that would chain these as operators (described under *Looking ahead*), but that primitive does not exist on the foundation this strategy commits to.
-
-```java
-package com.x9ware.examples;
-
-import java.nio.file.Path;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.stereotype.Service;
-
-import com.x9ware.application.X9SdkApplication;
-import com.x9ware.engines.X9ModifyEngine;
-import com.x9ware.engines.X9ValidateEngine;
-import com.x9ware.engines.X9WriteEngine;
-import com.x9ware.summaries.X9ValidationResult;
-import com.x9ware.summaries.X9WriteSummary;
-
-@Configuration
-public class CheckProcessingEngines {
-
-    @Bean
-    public X9ValidateEngine imageValidator(final X9SdkApplication app) {
-        return X9ValidateEngine.x937(app)
-                .validateTiffImages(true)
-                .build();
-    }
-
-    @Bean
-    public X9ModifyEngine bofdNormalizer(final X9SdkApplication app) {
-        return X9ModifyEngine.x937(app)
-                .transform(item -> { /* normalize BOFD routing */ return item; })
-                .build();
-    }
-
-    @Bean
-    public X9WriteEngine writer(final X9SdkApplication app) {
-        return X9WriteEngine.x937(app).build();
-    }
-}
-
-@Service
-public class DailySettlementService {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(DailySettlementService.class);
-
-    private final X9ValidateEngine imageValidator;
-    private final X9ModifyEngine bofdNormalizer;
-    private final X9WriteEngine writer;
-
-    public DailySettlementService(final X9ValidateEngine imageValidator,
-                                   final X9ModifyEngine bofdNormalizer,
-                                   final X9WriteEngine writer) {
-        this.imageValidator = imageValidator;
-        this.bofdNormalizer = bofdNormalizer;
-        this.writer = writer;
-    }
-
-    public X9WriteSummary process(final Path input, final Path output) {
-        // Each Engine is invoked independently; the service orchestrates them.
-        // A future workflow primitive could chain these into a single composition
-        // expression — see "Looking ahead — Engines as operators" in the strategy body.
-        final X9ValidationResult validation = imageValidator.fromPath(input).run();
-        if (validation.getSeverity().isError()) {
-            LOGGER.warn("validation reported errorCount={}", validation.getErrorCount());
-        }
-        return bofdNormalizer.fromPath(input).toPath(output).run();
     }
 }
 ```
