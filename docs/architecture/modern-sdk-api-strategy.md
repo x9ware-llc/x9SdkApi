@@ -114,28 +114,6 @@ Use-after-close fails fast: any operation on a closed `X9SdkApplication` throws 
 
 **Modern threading and container-friendliness.** The modern API surface is built to run cleanly in the environments customers actually deploy into. Engines hold no per-customer state in static caches; per-task state lives on instances the customer creates or that the customer's framework scopes. Spring Framework consumers get clean `@Bean` definition and `@Autowired` substitution because the interface-based public surface is DI-friendly by construction; Spring Boot consumers get near-zero ceremony — the customer supplies a license key via configuration, and the `x9-sdk-spring-boot-starter` companion artifact handles the rest, contributing an `@Bean X9SdkApplication` and wiring `@PreDestroy` to `close()` automatically. Customers running on JDK 21+ can call SDK code from virtual threads without pinning concerns — no synchronized blocks on long I/O, no thread-confined state. Container lifecycle (`@PreDestroy` from any container that honors it, Kubernetes pod shutdown via `AutoCloseable`) closes resources cleanly.
 
-### A worked example
-
-The same validation operation in plain Java:
-
-```java
-try (X9SdkApplication x9 = X9SdkApplication.builder()
-        .applicationName("my-app")
-        .licenseKey(LICENSE_KEY)
-        .build()) {
-    X9ValidationResult result = X9ValidateEngine.x937(x9)
-            .fromStream(upload)
-            .validateTiffImages(true)
-            .run();
-}
-```
-
-Eight lines including the builder block and `try-with-resources`. No license-registration call, no XML configuration loading, no dialect bind, no image-folder setting, no manual `SdkIO` plumbing. The customer types the application builder, the Engine, and the operation; everything else is handled by the builder's defaults and the Engine's defaults.
-
-What this replaces: a substantial preamble that opens every example today, plus the imperative I/O loop and manual heap walks that follow it.
-
-The same Engine accepts a `Path` source instead of a stream, or a programmatic list of items, with no different API shape — just a different builder method. Source is configuration on the Engine, not a different API for each source type.
-
 ### Looking ahead — Engines as operators
 
 The pillars above are what the modern API surface delivers. The Engine design also opens a door this strategy does not require for the foundation to be complete but is worth naming because the Engine shape positions it naturally: **Engines have clean input/output contracts that let them play the role of operators in payment-file workflows.** A read operator emits an X9Item stream from a file or stream; transformation operators (modify, validate, scrub) consume and produce X9Item streams; a sink operator writes the stream into a file or stream. The shape is the pipe-and-filter pattern familiar from shell pipelines and stream-processing frameworks, applied to the natural unit of payment-file processing — the X9Item.
@@ -189,7 +167,7 @@ This appendix shows the same operation — open an X9.37 file, validate it, modi
 
 ### Example 1 — Plain Java
 
-The canonical example in plain Java. `X9SdkApplication` is typed as the public interface; `var` hides dialect-concrete locals so the customer never types `X9ValidateEngine937`; `Path` is the source type (cloud-friendly, `Resource`-compatible); the Engine chain runs inline as a fluent expression. The customer constructs `X9SdkApplication` in a builder block and releases it via try-with-resources — the explicit per-application lifecycle, the project's default for standalone Java. JVM-global cleanup happens automatically via the defensive auto-cleanup mechanisms described in the lifecycle pillar; the customer never sees it.
+Example 1 is the canonical plain-Java integration. `X9SdkApplication` is built explicitly via the builder; `try-with-resources` provides scope-bounded determinism on top of the automatic shutdown-hook cleanup described in the lifecycle pillar. `var` hides dialect-concrete locals so the customer never types `X9ValidateEngine937`.
 
 ```java
 package com.x9ware.examples;
