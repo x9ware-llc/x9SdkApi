@@ -116,49 +116,42 @@ Use-after-close fails fast: any operation on a closed `X9SdkApplication` throws 
 
 **Modern threading and container-friendliness.** The modern API surface is built to run cleanly in the environments 2026 enterprise prospects actually deploy into. Engines hold no per-customer state in static caches; per-task state lives on instances the customer creates or that the customer's framework scopes. Spring Framework consumers get clean `@Bean` definition and `@Autowired` substitution because the interface-based public surface is DI-friendly by construction; Spring Boot consumers get near-zero ceremony — the customer supplies a license key via configuration, and the `x9-sdk-spring-boot-starter` companion artifact handles the rest, contributing an `@Bean X9SdkApplication` and wiring `@PreDestroy` to `close()` automatically. Customers running on JDK 21+ can call SDK code from virtual threads without pinning concerns — no synchronized blocks on long I/O, no thread-confined state. Container lifecycle (`@PreDestroy` from any container that honors it, Kubernetes pod shutdown via `AutoCloseable`) closes resources cleanly.
 
+### A worked example
+
+The same validation operation in plain Java:
+
+```java
+try (X9SdkApplication x9 = X9SdkApplication.builder()
+        .applicationName("my-app")
+        .licenseKey(LICENSE_KEY)
+        .build()) {
+    X9ValidationResult result = X9ValidateEngine.x937(x9)
+            .fromStream(upload)
+            .validateTiffImages(true)
+            .run();
+}
+```
+
+Eight lines including the builder block and `try-with-resources`. No license-registration call, no XML configuration loading, no dialect bind, no image-folder setting, no manual `SdkIO` plumbing. The customer types the application builder, the Engine, and the operation; everything else is handled by the builder's defaults and the Engine's defaults.
+
+What this replaces: a substantial preamble that opens every example today, plus the imperative I/O loop and manual heap walks that follow it.
+
+The same Engine accepts a `Path` source instead of a stream, or a programmatic list of items, with no different API shape — just a different builder method. Source is configuration on the Engine, not a different API for each source type.
+
 ### Looking ahead — Engines as operators
 
 The pillars above are what the modern API surface delivers. The Engine design also opens a door this strategy does not require for the foundation to be complete but is worth naming because the Engine shape positions it naturally: **Engines have clean input/output contracts that let them play the role of operators in payment-file workflows.** A read operator emits an X9Item stream from a file or stream; transformation operators (modify, validate, scrub) consume and produce X9Item streams; a sink operator writes the stream into a file or stream. The shape is the pipe-and-filter pattern familiar from shell pipelines and stream-processing frameworks, applied to the natural unit of payment-file processing — the X9Item.
 
 A future direction the modern API surface accommodates is chaining these operators into reusable workflows for complex payment-file operations: file consolidation across distributed capture points, multi-stage processing pipelines, dialect-conversion flows. X9Collector is a concrete candidate — its file-consolidation workflow is a natural composition of Engine operators.
 
-The connective tissue between operators — the streaming protocol, backpressure handling, error semantics, resource lifecycle across stages, workflow runtime — is genuinely complex and is not specified by this strategy. The foundation today supports independent Engine reuse via dependency injection. When and whether to extend the Engine design with a workflow primitive is a subsequent design and implementation decision; the Engine shape does not foreclose that direction.
-
-## A worked example
-
-Modern Spring Boot service, validating an uploaded check file:
-
-```java
-@Service
-public class CheckProcessor {
-
-    @Autowired X9SdkApplication x9;
-
-    public X9ValidationResult verify(InputStream upload) {
-        return X9ValidateEngine.x937(x9)
-            .fromStream(upload)
-            .validateTiffImages(true)
-            .run();
-    }
-}
-```
-
-Nine lines including the class declaration and method signature. No setup code. No license registration. No XML configuration loading. No dialect bind. No image folder setting. No `try-with-resources` around an SdkIO. The customer types the Engine and the operation; everything else is handled by Spring AutoConfiguration plus the Engine's defaults.
-
-What this replaces: a roughly seventy-line preamble that opens every example today, plus the imperative I/O loop and manual heap walks that follow it.
-
-The same Engine accepts a `Path` source instead of a stream, or a programmatic list of items, with no different API shape — just a different builder method. Source is configuration on the Engine, not a different API for each source type.
+The connective tissue between operators — the streaming protocol, backpressure handling, error semantics, resource lifecycle across stages, workflow runtime — is genuinely complex and is not specified by this strategy. The foundation today supports independent Engine reuse via dependency injection. When and whether to extend the Engine design with a workflow primitive is a subsequent design and implementation decision; the Engine shape does not rule out that direction.
 
 ## What is not decided here
 
 Specific decisions deferred to subsequent design work:
 
-- Whether the modern API surface commits to Spring Framework as a runtime substrate (recommendation: no — Spring lives in the opt-in starter, not in x9Sdk; final decision deferred)
-- Whether the Spring Boot starter ships in the initial release cycle or follows the core's stabilization (recommendation: follow stabilization; deferred for now)
-- Per-Engine builder method names beyond the universal verbs (those belong to the per-Engine designs)
-- The exact source-abstraction interface (a sibling design for source/sink handling follows from this strategy)
-- The ordering of Engine fluent-retrofit work between the existing renamed Engines and the new Reader/Writer/Modify Engines
-- When (or whether) to implement Engine-as-operator composition with a workflow primitive. The Engine design accommodates this direction; the streaming protocol, backpressure handling, error semantics, resource lifecycle, and workflow runtime are deferred to subsequent design and implementation work. The decision can wait until a concrete consumer (X9Collector or another product) needs it
+- Per-Engine builder method names beyond the universal operations (those belong to the per-Engine designs).
+- The exact source-abstraction interface for input and output (a related design follows from this strategy).
 
 ## Tradeoffs accepted
 
