@@ -208,9 +208,9 @@ import com.x9ware.engines.X9ValidateEngine;
 import com.x9ware.logging.X9LoggerFactory;
 
 /**
- * X9VerifyX9 is an example of x9.37 file processing using the modern Engine API. It opens an
- * input x9.37 file, validates it with image checks enabled, modifies records (setting the first
- * item's amount and dropping the second), and writes the result to an output file.
+ * X9CashLetterValidation is an example of x9.37 file processing using the modern Engine API. It
+ * opens an input x9.37 file, validates it with image checks enabled, modifies records (setting
+ * the first item's amount and dropping the second), and writes the result to an output file.
  *
  * @author X9Ware LLC. Copyright(c) 2012-2026 X9Ware LLC. All Rights Reserved. This is proprietary
  *         software as developed and licensed by X9Ware LLC under the exclusive legal right of the
@@ -218,17 +218,17 @@ import com.x9ware.logging.X9LoggerFactory;
  *         certain conditions, and are explicitly restricted from other specific uses including
  *         modification, sharing, reuse, redistribution, or reverse engineering.
  */
-public final class X9VerifyX9 {
+public final class X9CashLetterValidation {
 
     /**
      * Logger instance.
      */
-    private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
+    private static final Logger LOGGER = X9LoggerFactory.getLogger(X9CashLetterValidation.class);
 
     /**
-     * X9VerifyX9 Constructor (private; this is a static-main example).
+     * X9CashLetterValidation Constructor (private; this is a static-main example).
      */
-    private X9VerifyX9() {
+    private X9CashLetterValidation() {
     }
 
     /**
@@ -239,7 +239,7 @@ public final class X9VerifyX9 {
      */
     public static void main(final String[] args) {
         if (args.length != 3) {
-            LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
+            LOGGER.error("usage: X9CashLetterValidation <licenseKey> <input.x9> <output.x9>");
             System.exit(1);
         }
         final String licenseKey = args[0];
@@ -247,7 +247,7 @@ public final class X9VerifyX9 {
         final Path outputPath = Path.of(args[2]);
 
         try (var app = X9SdkApplication.builder()
-                .applicationName("X9VerifyX9")
+                .applicationName("X9CashLetterValidation")
                 .licenseKey(licenseKey)
                 .build()) {
 
@@ -301,11 +301,11 @@ import com.x9ware.engines.X9ModifyEngine;
 import com.x9ware.engines.X9ValidateEngine;
 
 /**
- * X9VerifyX9 is the Spring Boot variant of the x9.37 verification example. The X9SdkApplication
- * is autowired from the x9-sdk-spring-boot-starter, lifecycle is managed by Spring Boot
- * ({@code @PreDestroy} calls {@code close()} at shutdown), and the operation lives as an
- * {@code @Service} method callable from anywhere in the Spring Boot component graph. The Engine
- * pipeline itself is identical to the plain-Java example.
+ * X9CashLetterValidationService is the Spring Boot variant of the x9.37 validation example. The
+ * X9SdkApplication is autowired from the x9-sdk-spring-boot-starter, lifecycle is managed by
+ * Spring Boot ({@code @PreDestroy} calls {@code close()} at shutdown), and the operation lives
+ * as an {@code @Service} method callable from anywhere in the Spring Boot component graph. The
+ * Engine pipeline itself is identical to the plain-Java example.
  *
  * @author X9Ware LLC. Copyright(c) 2012-2026 X9Ware LLC. All Rights Reserved. This is proprietary
  *         software as developed and licensed by X9Ware LLC under the exclusive legal right of the
@@ -314,12 +314,12 @@ import com.x9ware.engines.X9ValidateEngine;
  *         modification, sharing, reuse, redistribution, or reverse engineering.
  */
 @Service
-public final class X9VerifyX9 {
+public final class X9CashLetterValidationService {
 
     /**
      * Logger instance.
      */
-    private static final Logger LOGGER = LoggerFactory.getLogger(X9VerifyX9.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(X9CashLetterValidationService.class);
 
     /**
      * Application root, autowired from the x9-sdk-spring-boot-starter.
