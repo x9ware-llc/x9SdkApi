@@ -1,6 +1,6 @@
 # Modern X9Ware SDK API Strategy
 
-X9Ware LLC • May 8, 2026
+X9Ware LLC • May 2026
 
 ## Status
 
@@ -8,15 +8,15 @@ X9Ware LLC • May 8, 2026
 
 ## Vision
 
-A modern Java API in 2026 is more than a fluent grammar. It is a coherent surface that reads as something an enterprise developer would have built themselves if given the year and the resources — interface-based, source-flexible, observability-ready, lifecycle-invisible, framework-friendly, container-deployable, and well-organized around customer mental models. Several pillars combine to produce that experience; no single one is sufficient on its own.
+The modern X9Ware SDK API aims to meet the expectations enterprise Java developers have of a modern library — operations matching how they think about their work, inputs accepted from any reasonable source, simplicity and conventions consistent with the rest of the Java ecosystem, and clean integration with their existing tools.
 
-X9Ware's competitive advantage in 2026 lives in what we ship, not how fast we ship it. AI tooling has flattened the speed at which any team can produce incremental features; differentiation now comes from the choices we make about what we build. This strategy describes the shape of a modern X9Ware SDK API and the structure for delivering it.
+X9Ware's competitive advantage lives in what we ship, not how fast we ship it. AI tooling has flattened the speed at which any team can produce incremental features; differentiation now comes from the choices we make about what we build. This strategy describes the shape of a modern X9Ware SDK API and the structure for delivering it.
 
 ## Executive summary
 
-X9Ware should add a modern Java API to the existing SDK. The legacy `x9Sdk` direct-construction surface continues unchanged for the eighteen customers built on it; the modern API surface lands in the same `x9Sdk` artifact and becomes what 2026 enterprise prospects evaluate when comparing X9Ware against commercial and open-source alternatives.
+X9Ware should add a modern Java API to the existing SDK. The legacy `x9Sdk` direct-construction surface continues unchanged for the eighteen customers built on it; the modern API surface lands in the same `x9Sdk` artifact and becomes what enterprise prospects evaluate when comparing X9Ware against commercial and open-source alternatives.
 
-The strategic case is **customer acquisition**. In 2026, Spring ecosystem compatibility is table stakes for enterprise Java; roughly nine of ten Fortune 500 companies use Java with Spring Boot as the primary backend choice. AI-armed competitors can match incremental moves quickly, which means differentiation must live in *what we ship*, not how fast we ship it. The test: "would a developer evaluating this say *yes, this is what I would build myself*."
+The strategic case is **customer acquisition**. Spring ecosystem compatibility is table stakes for enterprise Java; roughly nine of ten Fortune 500 companies use Java with Spring Boot as the primary backend choice. AI-armed competitors can match incremental moves quickly, which means differentiation must live in *what we ship*, not how fast we ship it. The test: "would a developer evaluating this say *yes, this is what I would build myself*."
 
 The modern API surface aims for that result. Engines (verb-shaped operations like `X9ValidateEngine`, `X9WriteEngine`) and the `X9SdkApplication` lifecycle root become the customer-facing surface, shaped by the design language modern Java APIs follow: Engine-centric, source-agnostic (file, stream, programmatic items uniformly), interface-based, JavaBean-conventional, observability-ready, Spring-friendly, container-friendly. The same operation runs in 84 lines of plain Java, or 77 lines as a Spring Boot `@Service` consumed through the starter — down from 760 lines in the legacy direct-construction style today (all three figures include Javadoc and copyright blocks for an apples-to-apples comparison). The verbose setup block every example opens with today — license registration, configuration loading, dialect binding, and SDK options — collapses to a small builder block in plain Java and to zero customer code in Spring Boot.
 
@@ -26,13 +26,13 @@ This is "think big, deliver big" applied to the SDK API.
 
 Four operating principles shape the strategy.
 
-**Think big, deliver big.** What we build has to be worth aiming for. Incremental polish on the existing SDK is not enough; the goal is an API that 2026 enterprise developers actively want to use.
+**Think big, deliver big.** What we build has to be worth aiming for. Incremental polish on the existing SDK is not enough; the goal is an API that enterprise developers actively want to use.
 
 **Differentiation lives in what we ship, not how fast.** AI lets X9Ware build anything we can dream of — and it lets competitors do the same. The advantage is no longer in shipping faster; it is in shipping something materially better than what an open-source integration framework or a commercial check-processing SDK ships. The bar is high because the competition's bar is rising too.
 
 **The acquisition lens.** The eighteen current x9Sdk customers came in over the past decade and use the legacy direct-construction surface. Their tech stacks reflect that era; they are not the prospects this strategy targets. The audience the modern API surface aims at is the new prospect a sales conversation surfaces tomorrow — predominantly Cloud, Spring Boot, container-deployed, modernization-aware. That prospect evaluates the SDK by feel before they ever ship a line of integration code; the API has to read as something they would have built themselves.
 
-**Spring ecosystem compatibility is table stakes in 2026.** Spring Boot remains the dominant backend framework for enterprise Java development, powering approximately 60% of enterprise backends, and nearly 92% of Fortune 100 companies still rely on the Java ecosystem for mission-critical operations. Quarkus and Micronaut exist but are bounded — their differentiators (cold-start time, memory footprint) do not apply to file-processing workloads. For X9Ware's market, supporting Spring through an opt-in companion artifact is a low-risk decision with high upside.
+**Spring ecosystem compatibility is table stakes.** Spring Boot remains the dominant backend framework for enterprise Java development, powering approximately 60% of enterprise backends, and nearly 92% of Fortune 100 companies still rely on the Java ecosystem for mission-critical operations. Quarkus and Micronaut exist but are bounded — their differentiators (cold-start time, memory footprint) do not apply to file-processing workloads. For X9Ware's market, supporting Spring through an opt-in companion artifact is a low-risk decision with high upside.
 
 ## The proposal — modern API delivered in x9Sdk
 
@@ -72,7 +72,7 @@ This decision is revisitable as the Java 1.8 customer segment shrinks. JDK 17 fl
 
 ## Pillars of a modern X9Ware SDK API
 
-Our north star is the "would you write this yourself" test. The pillars below name what passing that test actually requires of an SDK in 2026. Each is a foundation the surface rests on; together they produce the coherent experience a 2026 enterprise prospect expects. Each pillar is independently meaningful but does not carry the API on its own — the strength comes from their alignment.
+Our north star is the "would you write this yourself" test. The pillars below name what passing that test actually requires of a modern SDK. Each is a foundation the surface rests on; together they produce the coherent experience an enterprise prospect expects. Each pillar is independently meaningful but does not carry the API on its own — the strength comes from their alignment.
 
 **Ease of use.** The customer should reach the result quickly, with minimal ceremony and minimal boilerplate the SDK can manage internally. Three design moves carry this pillar:
 
@@ -114,7 +114,7 @@ Use-after-close fails fast: any operation on a closed `X9SdkApplication` throws 
 
 **Standards-based observability.** The modern API surface emits signals through standard Java observability interfaces — SLF4J for logs (the customer wires their own SLF4J binding; the modern API does not configure logging itself), Micrometer for metrics, and OpenTelemetry-compatible spans on long-running operations. The customer's existing observability stack — Prometheus, Datadog, New Relic, Grafana, anything else — receives those signals because both sides speak the same standards. The SDK does not pick the backend or require the customer to wire up custom hooks; it conforms to the interfaces the customer's infrastructure already consumes. When no observability stack is present (the customer has not configured a `MeterRegistry`, a `Tracer`, or a particular SLF4J binding), the SDK is silently inert on those channels — no logs lost, no metrics buffered, no spans created without a receiver. This is a step beyond legacy x9Sdk, which emits only logs; the modern surface adds metrics and traces as first-class signals when the customer's application provides a `MeterRegistry` and a `Tracer`. Spring Boot customers get this wiring through standard auto-configuration; other customers wire it explicitly, as they would for any modern Java library.
 
-**Modern threading and container-friendliness.** The modern API surface is built to run cleanly in the environments 2026 enterprise prospects actually deploy into. Engines hold no per-customer state in static caches; per-task state lives on instances the customer creates or that the customer's framework scopes. Spring Framework consumers get clean `@Bean` definition and `@Autowired` substitution because the interface-based public surface is DI-friendly by construction; Spring Boot consumers get near-zero ceremony — the customer supplies a license key via configuration, and the `x9-sdk-spring-boot-starter` companion artifact handles the rest, contributing an `@Bean X9SdkApplication` and wiring `@PreDestroy` to `close()` automatically. Customers running on JDK 21+ can call SDK code from virtual threads without pinning concerns — no synchronized blocks on long I/O, no thread-confined state. Container lifecycle (`@PreDestroy` from any container that honors it, Kubernetes pod shutdown via `AutoCloseable`) closes resources cleanly.
+**Modern threading and container-friendliness.** The modern API surface is built to run cleanly in the environments enterprise prospects actually deploy into. Engines hold no per-customer state in static caches; per-task state lives on instances the customer creates or that the customer's framework scopes. Spring Framework consumers get clean `@Bean` definition and `@Autowired` substitution because the interface-based public surface is DI-friendly by construction; Spring Boot consumers get near-zero ceremony — the customer supplies a license key via configuration, and the `x9-sdk-spring-boot-starter` companion artifact handles the rest, contributing an `@Bean X9SdkApplication` and wiring `@PreDestroy` to `close()` automatically. Customers running on JDK 21+ can call SDK code from virtual threads without pinning concerns — no synchronized blocks on long I/O, no thread-confined state. Container lifecycle (`@PreDestroy` from any container that honors it, Kubernetes pod shutdown via `AutoCloseable`) closes resources cleanly.
 
 ### A worked example
 
