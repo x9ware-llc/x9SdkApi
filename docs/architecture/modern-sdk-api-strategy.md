@@ -165,7 +165,7 @@ Decisions in this strategy carry deliberate tradeoffs. Naming them explicitly in
 ## Path forward
 
 1. **Strategy review.** This document, reviewed internally and revised with feedback.
-2. **Substrate decisions.** Sibling designs for: source/sink abstraction, lifecycle abstraction, observability seams.
+2. **Foundation decisions for the pilot.** Source abstraction, lifecycle integration, observability hooks — written as separate designs where the choice has cross-Engine consequences, settled in-line with the pilot otherwise.
 3. **Pilot Engine.** One Engine implemented in the x9SdkApi development repository following the design language. Validates the conventions against real code before they are locked across the surface.
 4. **Incremental rollout.** Subsequent Engines, with the User Guide reframe shipping topics in lockstep.
 5. **Merge x9SdkApi into x9Sdk** before the first customer release of the modern API surface, preserving x9SdkApi's git history. See [`modern-api-merge-runbook.md`](../projects/modern-api-merge/modern-api-merge-runbook.md) for the procedure.
