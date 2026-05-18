@@ -53,8 +53,8 @@ Candidates considered:
 |---|---|---|
 | **Java 1.8** (chosen) | Matches x9Sdk's existing floor; every current customer can adopt the modern API surface | — |
 | **JDK 11** | `var`, modules, `java.net.http`, text blocks (JDK 13 backport varies) | Java 1.8 holdouts on long-term-support contracts |
-| **JDK 17** | Records, sealed types, pattern-matching `instanceof`, text blocks, switch expressions; aligns with Spring Boot 3 starter floor | Java 1.8 + JDK 11 LTS shops |
-| **JDK 21** | Virtual threads, record patterns, switch patterns; aligns with likely Spring Boot 4 floor | Narrower still; threading is not typically a concern at the SDK API boundary |
+| **JDK 17** | Records, sealed types, pattern-matching `instanceof`, text blocks, switch expressions; matches the Spring Boot 4 starter floor | Java 1.8 + JDK 11 LTS shops |
+| **JDK 21** | Virtual threads, record patterns, switch patterns | Narrower still; threading is not typically a concern at the SDK API boundary |
 | **JDK 25** | Latest LTS; signals "modern" by being current; adds scoped values, stream gatherers, further pattern-matching refinements | Narrowest segment; meaningful adoption pace lags LTS by 12–24 months |
 
 Customer call-site features — `var`, pattern-matching `instanceof`, switch expressions, text blocks in their own code, virtual threads in their own runtime — work at any JDK the customer chooses, regardless of our compiled floor. The features that require *us* to upgrade are the ones we ship in our public surface.
@@ -67,6 +67,8 @@ Customer call-site features — `var`, pattern-matching `instanceof`, switch exp
 Records-as-return-types can be approximated with verbose final classes; the customer-side difference is destructuring syntax in `switch`, which the JavaBean idiom approximates with `instanceof` + getter chains. Virtual threads (JDK 21+) similarly stay out of our internal implementation; customer applications running on a JDK 21+ runtime get the benefit of virtual threads regardless of our compile target.
 
 This decision is revisitable as the Java 1.8 customer segment shrinks. JDK 17 floor + JPMS modules + sealed result types is a coherent forward-looking package — recorded here so the option is preserved rather than rediscovered.
+
+**Starter caveat — JDK 17 minimum, JDK 25 recommended.** The optional `x9-sdk-spring-boot-starter` companion artifact targets Spring Boot 4 and inherits Spring Boot's JDK floor: JDK 17 minimum, JDK 25 recommended. The plain x9Sdk modern API surface runs at Java 1.8 regardless; customers on Java 1.8 or JDK 11 can use the modern API via the plain-Java path. Only the Spring Boot starter is tied to Spring Boot's JDK requirement.
 
 ## Pillars of a modern X9Ware SDK API
 
@@ -176,7 +178,7 @@ The pilot Engine is the empirical test. If the design language proves brittle in
 The strategy is expected to be stable for the modernization timeframe. Specific signals that warrant revision:
 
 - A paying customer surfaces with conflicting needs that x9Sdk cannot serve and x9SdkApi cannot serve in its proposed form.
-- The Spring ecosystem shifts materially (Spring Framework 7, Spring Boot 4) in ways that change the foundation decision.
+- A future Spring major release (Spring Boot 5, Spring Framework 8) breaks compatibility in ways that change the foundation decision.
 - A competitor ships a payment file-processing SDK that materially redefines what "looking better" means and the strategy's design language no longer matches.
 - AI tooling changes the bar for "would you write this yourself" — what counts as "modern" has to keep moving.
 
