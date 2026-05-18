@@ -175,7 +175,7 @@ The pilot Engine is the empirical test. If the design language proves brittle in
 
 ## When to revisit
 
-The strategy is expected to be stable for the modernization rollout. Specific signals that warrant revision:
+The strategy is expected to be stable for the modernization timeframe. Specific signals that warrant revision:
 
 - A paying customer surfaces with conflicting needs that x9Sdk cannot serve and x9SdkApi cannot serve in its proposed form.
 - The Spring ecosystem shifts materially (Spring Framework 7, Spring Boot 4) in ways that change the foundation decision.
