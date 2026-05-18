@@ -77,7 +77,7 @@ The pillars below describe the design choices that shape the modern API surface 
 **Ease of use.** The customer should reach the result quickly, with minimal ceremony and minimal boilerplate the SDK can manage internally. Three design moves carry this pillar:
 
 - **Engine-centric fluent API.** The customer's first interaction is with an Engine — `X9ValidateEngine`, `X9WriteEngine`, `X9ReadEngine` — not with a file, a facade method, or a utility-shaped wrapper. Source (file, stream, programmatic items) is configuration on the Engine; the Engine's lifecycle is build → configure → run; the result is a typed summary. The fluent grammar makes the chain read as a single intentional act rather than as a sequence of imperative steps. The detailed design of the Engine factory pattern, terminal `.run()` operation, source/sink builder methods, and conventions every Engine follows lives in the fluent API design referenced under *Related documents*.
-- **Spring Boot zero-ceremony onboarding.** A customer using the optional `x9-sdk-spring-boot-starter` gets `X9SdkApplication` autowired and lifecycle managed through `@PreDestroy` — no builder block, no try-with-resources, no explicit shutdown. The plain-Java example's 84 lines collapse to roughly 77 lines as a Spring Boot `@Service`.
+- **Spring Boot zero-ceremony onboarding.** A customer using the optional `x9-sdk-spring-boot-starter` gets `X9SdkApplication` autowired and lifecycle managed through `@PreDestroy` — no builder block, no try-with-resources, no explicit shutdown. The plain-Java example's 84 lines collapse to roughly 77 lines as a Spring Boot `@Service`. What the starter contributes beyond the autowired application — `@ConfigurationProperties` binding, helper beans, Actuator health indicators, Micrometer wiring — is a starter-design concern, not a strategy concern.
 - **Verbose setup absorbed by the SDK.** Boilerplate that today opens every example — license registration, configuration loading, dialect binding, SDK options — is internalized in the builder (or the starter), out of customer code.
 
 **Source-agnostic by construction.** The API accepts input from any source type uniformly: `Path`, `InputStream`, Spring `Resource`, programmatic items. No type in the public surface forces customers through `java.io.File`. The current `X9File` extends `java.io.File` and encodes that constraint into the type system; modern x9SdkApi cannot. Cloud storage, Resource abstractions, and stream-only inputs all become first-class without API duplication.
@@ -300,7 +300,7 @@ public final class X9CashLetterValidationService {
     /**
      * Application root, autowired from the x9-sdk-spring-boot-starter.
      */
-    @Autowired X9SdkApplication x9;
+    @Autowired X9SdkApplication x9SdkApp;
 
     /**
      * Verifies an x9.37 file by validating images and applying record modifications, writing the
@@ -312,7 +312,7 @@ public final class X9CashLetterValidationService {
      *            output x9.37 file
      */
     public void verify(final Path inputPath, final Path outputPath) {
-        final var result = X9ValidateEngine.x937(x9)
+        final var result = X9ValidateEngine.x937(x9SdkApp)
                 .fromPath(inputPath)
                 .validateTiffImages(true)
                 .run();
@@ -320,7 +320,7 @@ public final class X9CashLetterValidationService {
                 result.getErrorCount(), result.getSeverity());
 
         final var itemIndex = new AtomicInteger(0);
-        final var modifySummary = X9ModifyEngine.x937(x9)
+        final var modifySummary = X9ModifyEngine.x937(x9SdkApp)
                 .fromPath(inputPath)
                 .toPath(outputPath)
                 .transform(item -> {
