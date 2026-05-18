@@ -18,7 +18,7 @@ X9Ware should add a modern Java API to the existing SDK. The legacy `x9Sdk` dire
 
 The strategic case is **customer acquisition**. In 2026, Spring ecosystem compatibility is table stakes for enterprise Java; roughly nine of ten Fortune 500 companies use Java with Spring Boot as the primary backend choice. AI-armed competitors can match incremental moves quickly, which means differentiation must live in *what we ship*, not how fast we ship it. The test: "would a developer evaluating this say *yes, this is what I would build myself*."
 
-The modern API surface aims for that result. Engines (verb-shaped operations like `X9ValidateEngine`, `X9WriteEngine`) and the `X9SdkApplication` lifecycle root become the customer-facing surface, shaped by the design language modern Java APIs follow: Engine-centric, source-agnostic (file, stream, programmatic items uniformly), interface-based, JavaBean-conventional, observability-ready, Spring-friendly, container-friendly. The same operation runs in 61 lines of plain Java, or 49 lines as a Spring Boot `@Service` consumed through the starter — down from 760 lines in the legacy direct-construction style today. The verbose setup block every example opens with today — license registration, configuration loading, dialect binding, and SDK options — collapses to a small builder block in plain Java and to zero customer code in Spring Boot.
+The modern API surface aims for that result. Engines (verb-shaped operations like `X9ValidateEngine`, `X9WriteEngine`) and the `X9SdkApplication` lifecycle root become the customer-facing surface, shaped by the design language modern Java APIs follow: Engine-centric, source-agnostic (file, stream, programmatic items uniformly), interface-based, JavaBean-conventional, observability-ready, Spring-friendly, container-friendly. The same operation runs in 84 lines of plain Java, or 77 lines as a Spring Boot `@Service` consumed through the starter — down from 760 lines in the legacy direct-construction style today (all three figures include Javadoc and copyright blocks for an apples-to-apples comparison). The verbose setup block every example opens with today — license registration, configuration loading, dialect binding, and SDK options — collapses to a small builder block in plain Java and to zero customer code in Spring Boot.
 
 This is "think big, deliver big" applied to the SDK API.
 
@@ -77,7 +77,7 @@ Our north star is the "would you write this yourself" test. The pillars below na
 **Ease of use.** The customer should reach the result quickly, with minimal ceremony and minimal boilerplate the SDK can manage internally. Three design moves carry this pillar:
 
 - **Engine-centric fluent API.** The customer's first interaction is with an Engine — `X9ValidateEngine`, `X9WriteEngine`, `X9ReadEngine` — not with a file, a facade method, or a utility-shaped wrapper. Source (file, stream, programmatic items) is configuration on the Engine; the Engine's lifecycle is build → configure → run; the result is a typed summary. The fluent grammar makes the chain read as a single intentional act rather than as a sequence of imperative steps. The detailed design of the Engine factory pattern, terminal `.run()` operation, source/sink builder methods, and conventions every Engine follows lives in the fluent API design referenced under *Related documents*.
-- **Spring Boot zero-ceremony onboarding.** A customer using the optional `x9-sdk-spring-boot-starter` gets `X9SdkApplication` autowired and lifecycle managed through `@PreDestroy` — no builder block, no try-with-resources, no explicit shutdown. The Engine pipeline that runs in 61 lines of plain Java collapses to roughly 49 lines as a Spring Boot `@Service`.
+- **Spring Boot zero-ceremony onboarding.** A customer using the optional `x9-sdk-spring-boot-starter` gets `X9SdkApplication` autowired and lifecycle managed through `@PreDestroy` — no builder block, no try-with-resources, no explicit shutdown. The Engine pipeline that runs in 84 lines of plain Java collapses to roughly 77 lines as a Spring Boot `@Service`.
 - **Verbose setup absorbed by the SDK.** Boilerplate that today opens every example — license registration, configuration loading, dialect binding, SDK options — is internalized in the builder (or the starter), out of customer code.
 
 **Source-agnostic by construction.** The API accepts input from any source type uniformly: `Path`, `InputStream`, Spring `Resource`, programmatic items. No type in the public surface forces customers through `java.io.File`. The current `X9File` extends `java.io.File` and encodes that constraint into the type system; modern x9SdkApi cannot. Cloud storage, Resource abstractions, and stream-only inputs all become first-class without API duplication.
@@ -207,13 +207,36 @@ import com.x9ware.engines.X9ModifyEngine;
 import com.x9ware.engines.X9ValidateEngine;
 import com.x9ware.logging.X9LoggerFactory;
 
+/**
+ * X9VerifyX9 is an example of x9.37 file processing using the modern Engine API. It opens an
+ * input x9.37 file, validates it with image checks enabled, modifies records (setting the first
+ * item's amount and dropping the second), and writes the result to an output file.
+ *
+ * @author X9Ware LLC. Copyright(c) 2012-2026 X9Ware LLC. All Rights Reserved. This is proprietary
+ *         software as developed and licensed by X9Ware LLC under the exclusive legal right of the
+ *         copyright holder. All licensees are provided the right to use the software only under
+ *         certain conditions, and are explicitly restricted from other specific uses including
+ *         modification, sharing, reuse, redistribution, or reverse engineering.
+ */
 public final class X9VerifyX9 {
 
+    /**
+     * Logger instance.
+     */
     private static final Logger LOGGER = X9LoggerFactory.getLogger(X9VerifyX9.class);
 
+    /**
+     * X9VerifyX9 Constructor (private; this is a static-main example).
+     */
     private X9VerifyX9() {
     }
 
+    /**
+     * Main().
+     *
+     * @param args
+     *            command line arguments: licenseKey, inputPath, outputPath
+     */
     public static void main(final String[] args) {
         if (args.length != 3) {
             LOGGER.error("usage: X9VerifyX9 <licenseKey> <input.x9> <output.x9>");
@@ -277,13 +300,41 @@ import com.x9ware.application.X9SdkApplication;
 import com.x9ware.engines.X9ModifyEngine;
 import com.x9ware.engines.X9ValidateEngine;
 
+/**
+ * X9VerifyX9 is the Spring Boot variant of the x9.37 verification example. The X9SdkApplication
+ * is autowired from the x9-sdk-spring-boot-starter, lifecycle is managed by Spring Boot
+ * ({@code @PreDestroy} calls {@code close()} at shutdown), and the operation lives as an
+ * {@code @Service} method callable from anywhere in the Spring Boot component graph. The Engine
+ * pipeline itself is identical to the plain-Java example.
+ *
+ * @author X9Ware LLC. Copyright(c) 2012-2026 X9Ware LLC. All Rights Reserved. This is proprietary
+ *         software as developed and licensed by X9Ware LLC under the exclusive legal right of the
+ *         copyright holder. All licensees are provided the right to use the software only under
+ *         certain conditions, and are explicitly restricted from other specific uses including
+ *         modification, sharing, reuse, redistribution, or reverse engineering.
+ */
 @Service
 public final class X9VerifyX9 {
 
+    /**
+     * Logger instance.
+     */
     private static final Logger LOGGER = LoggerFactory.getLogger(X9VerifyX9.class);
 
+    /**
+     * Application root, autowired from the x9-sdk-spring-boot-starter.
+     */
     @Autowired X9SdkApplication x9;
 
+    /**
+     * Verifies an x9.37 file by validating images and applying record modifications, writing the
+     * result to the supplied output path.
+     *
+     * @param inputPath
+     *            input x9.37 file
+     * @param outputPath
+     *            output x9.37 file
+     */
     public void verify(final Path inputPath, final Path outputPath) {
         final var result = X9ValidateEngine.x937(x9)
                 .fromPath(inputPath)
