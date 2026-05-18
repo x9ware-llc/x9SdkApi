@@ -45,7 +45,7 @@ The customer-facing end state is a single SDK distribution:
 
 ### JDK floor for the modern API surface
 
-**Decision: Java 1.8.** x9Sdk's existing Java 1.8 floor is preserved; the modern API surface compiles and runs at the same level. This section answers whether the *modern* surface is reachable from Java 8. It is, intentionally — the absence of a dramatic-better case for upgrading outweighs the customer-segment cost of excluding Java 1.8 shops from the modern API.
+**Decision: Java 1.8.** x9Sdk's existing Java 1.8 floor is preserved to support certain enterprise customers; the modern API surface compiles and runs at the same level. This section answers whether the *modern* surface is reachable from Java 8. It is, intentionally — the absence of a dramatic-better case for upgrading outweighs the customer-segment cost of excluding Java 1.8 shops from the modern API.
 
 Candidates considered:
 
